@@ -29,6 +29,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
     supervisors,
     getFilteredStudents,
     getSupervisorForStudent,
+    isStudentFullyCleared,
     signDocument,
     stats,
     setSubmissionFilter,
@@ -82,6 +83,8 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
 
   const getStatusBadge = (student) => {
     const hasDocs = student.documents && student.documents.length > 0;
+    if (isStudentFullyCleared(student))
+      return { label: 'Degree Cleared (3 Cr)', cls: 'bg-emerald-100 text-emerald-900 border-emerald-300', dot: 'bg-emerald-400' };
     if (!hasDocs || student.status === 'pending_submission')
       return { label: 'Requires Submission', cls: 'bg-amber-100 text-amber-900 border-amber-300', dot: 'bg-amber-400' };
     if (student.status === 'pending_supervisor')
@@ -90,7 +93,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
       return { label: 'With Incharge', cls: 'bg-indigo-100 text-indigo-900 border-indigo-300', dot: 'bg-indigo-400' };
     if (student.status === 'pending_hod')
       return { label: 'Awaiting HOD Seal', cls: 'bg-purple-100 text-purple-900 border-purple-300', dot: 'bg-purple-400', pulse: true };
-    return { label: 'Degree Cleared (3 Cr)', cls: 'bg-emerald-100 text-emerald-900 border-emerald-300', dot: 'bg-emerald-400' };
+    return { label: 'Awaiting Review', cls: 'bg-slate-100 text-slate-800 border-slate-300', dot: 'bg-slate-400' };
   };
 
   // ═══════════════════════════════════════════════════════════════
@@ -528,8 +531,13 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
   // TAB: DEPARTMENT ROSTER (candidate dossiers + final clearance)
   // ═══════════════════════════════════════════════════════════════
   if (activeTab === 'department_students') {
-    const clearanceStudents = filteredStudents.filter((student) => student.status !== 'completed');
-    const fullyEndorsedStudents = students.filter((student) => student.status === 'completed');
+    const clearanceStudents = filteredStudents
+      .map((student) => ({
+        ...student,
+        pendingDocs: (student.documents || []).filter((doc) => doc.inchargeSigned && !doc.hodSigned),
+      }))
+      .filter((student) => student.status !== 'completed' || student.pendingDocs.length > 0);
+    const fullyEndorsedStudents = students.filter((student) => isStudentFullyCleared(student));
     return (
       <div className="space-y-6 fade-in">
         {/* Section banner */}
@@ -591,7 +599,8 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
               {clearanceStudents.map((student) => {
                 const supervisor = getSupervisorForStudent(student);
                 const hasDocs = student.documents && student.documents.length > 0;
-                const primaryDoc = student.documents?.[0];
+                const pendingDocs = student.pendingDocs || [];
+                const primaryDoc = pendingDocs[0] || student.documents?.[0];
                 const status = getStatusBadge(student);
 
                 return (
@@ -660,6 +669,21 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                         )}
                       </div>
                     </div>
+                    {pendingDocs.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500 space-y-2">
+                        {pendingDocs.map((doc) => (
+                          <div key={doc.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-violet-200 rounded-lg bg-violet-50 px-3 py-2">
+                            <span><span className="font-semibold text-slate-700">Document:</span> {doc.title} ({doc.fileName})</span>
+                            <button
+                              onClick={() => handleHodApprove(student, doc)}
+                              className="px-3 py-1 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-[10px] font-bold"
+                            >
+                              Seal This Document
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -683,7 +707,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
   // TAB: FULLY ENDORSED STUDENTS
   // ═══════════════════════════════════════════════════════════════
   if (activeTab === 'fully_endorsed') {
-    const fullyEndorsedStudents = students.filter((student) => student.status === 'completed');
+    const fullyEndorsedStudents = students.filter((student) => isStudentFullyCleared(student));
     return (
       <div className="space-y-6 fade-in">
         <div className="relative rounded-2xl overflow-hidden shadow-xl"
@@ -739,12 +763,6 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border bg-emerald-100 text-emerald-900 border-emerald-300">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Fully Endorsed · 3 Cr
                         </span>
-                        {primaryDoc && (
-                          <button onClick={() => onOpenDocumentViewer(student, primaryDoc)}
-                            className="px-3 py-1 rounded-lg text-xs font-semibold bg-white border border-emerald-200 hover:bg-emerald-50 text-slate-700 flex items-center gap-1.5 shadow-sm transition-all">
-                            <Eye className="w-3.5 h-3.5 text-emerald-600" /> View Form
-                          </button>
-                        )}
                       </div>
                     </div>
                   </div>

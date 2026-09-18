@@ -143,6 +143,43 @@ export const PortalProvider = ({ children }) => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
+  const isStudentFullyCleared = (student) => {
+    const docs = Array.isArray(student?.documents) ? student.documents : [];
+    if (docs.length === 0) return false;
+
+    const requiredTemplateIds = (templates || []).map((tpl) => tpl.id).filter(Boolean);
+    if (requiredTemplateIds.length > 0) {
+      const submittedTemplateIds = new Set(
+        docs.filter((doc) => doc?.templateId && requiredTemplateIds.includes(doc.templateId)).map((doc) => doc.templateId)
+      );
+      if (!requiredTemplateIds.every((templateId) => submittedTemplateIds.has(templateId))) {
+        return false;
+      }
+    }
+
+    return docs.every((doc) => doc.studentSigned && doc.supervisorSigned && doc.inchargeSigned && doc.hodSigned);
+  };
+
+  const getStudentOverallStatus = (documents = []) => {
+    if (!Array.isArray(documents) || documents.length === 0) return 'pending_submission';
+
+    const requiredTemplateIds = (templates || []).map((tpl) => tpl.id).filter(Boolean);
+    const allRequiredTemplatesSubmitted = requiredTemplateIds.length === 0 || requiredTemplateIds.every((templateId) =>
+      documents.some((doc) => doc.templateId === templateId)
+    );
+
+    const allDocsCompleted = documents.every(doc =>
+      doc.studentSigned && doc.supervisorSigned && doc.inchargeSigned && doc.hodSigned
+    );
+    if (allDocsCompleted && allRequiredTemplatesSubmitted) return 'completed';
+
+    if (documents.some(doc => doc.studentSigned && !doc.supervisorSigned)) return 'pending_supervisor';
+    if (documents.some(doc => doc.supervisorSigned && !doc.inchargeSigned)) return 'pending_incharge';
+    if (documents.some(doc => doc.inchargeSigned && !doc.hodSigned)) return 'pending_hod';
+
+    return 'pending_submission';
+  };
+
   // Quick switch role helper (Student, Supervisor, Incharge, HOD)
   const switchRole = (role, id = null) => {
     if (role === 'student') {
@@ -353,18 +390,21 @@ export const PortalProvider = ({ children }) => {
         return {
           ...std,
           documents: updatedDocs,
-          status: 'pending_supervisor'
+          status: getStudentOverallStatus(updatedDocs)
         };
       }
       return std;
     }));
 
     if (currentUser?.id === studentId) {
-      setCurrentUser(prev => ({
-        ...prev,
-        documents: [...(prev.documents || []), newDoc],
-        status: 'pending_supervisor'
-      }));
+      setCurrentUser(prev => {
+        const updatedDocs = [...(prev.documents || []), newDoc];
+        return {
+          ...prev,
+          documents: updatedDocs,
+          status: getStudentOverallStatus(updatedDocs)
+        };
+      });
     }
 
     showToast('Internship document uploaded & signed successfully! Forwarded to Faculty Supervisor.');
@@ -375,6 +415,11 @@ export const PortalProvider = ({ children }) => {
     const removed = (students.find(std => std.id === studentId)?.documents || []).find(doc => doc.id === docId);
     if (!removed) return;
 
+    if (removed.inchargeSigned || removed.hodSigned) {
+      showToast('This document is already approved by the Incharge or HOD and cannot be deleted.');
+      return;
+    }
+
     setStudents(prev => prev.map(std => {
       if (std.id !== studentId) return std;
 
@@ -382,7 +427,7 @@ export const PortalProvider = ({ children }) => {
       return {
         ...std,
         documents: updatedDocs,
-        status: updatedDocs.length === 0 ? 'pending_submission' : std.status,
+        status: getStudentOverallStatus(updatedDocs),
       };
     }));
 
@@ -392,7 +437,7 @@ export const PortalProvider = ({ children }) => {
         return {
           ...prev,
           documents: updatedDocs,
-          status: updatedDocs.length === 0 ? 'pending_submission' : prev.status,
+          status: getStudentOverallStatus(updatedDocs),
         };
       });
     }
@@ -407,7 +452,6 @@ export const PortalProvider = ({ children }) => {
     setStudents(prev => prev.map(std => {
       if (std.id !== studentId) return std;
 
-      let newStatus = std.status;
       const updatedDocs = (std.documents || []).map(doc => {
         if (doc.id !== docId) return doc;
 
@@ -417,25 +461,21 @@ export const PortalProvider = ({ children }) => {
           updatedDoc.studentSigned = true;
           updatedDoc.studentSignature = signatureDataUrl;
           updatedDoc.studentSignedAt = now;
-          newStatus = 'pending_supervisor';
         } else if (signerRole === 'supervisor') {
           updatedDoc.supervisorSigned = true;
           updatedDoc.supervisorSignature = signatureDataUrl;
           updatedDoc.supervisorSignedAt = now;
           updatedDoc.feedback = note || 'Approved and endorsed by Faculty Supervisor.';
-          newStatus = 'pending_incharge';
         } else if (signerRole === 'incharge') {
           updatedDoc.inchargeSigned = true;
           updatedDoc.inchargeSignature = signatureDataUrl;
           updatedDoc.inchargeSignedAt = now;
           updatedDoc.feedback = note || 'Vetted and stamped by Internship Incharge.';
-          newStatus = 'pending_hod';
         } else if (signerRole === 'hod') {
           updatedDoc.hodSigned = true;
           updatedDoc.hodSignature = signatureDataUrl;
           updatedDoc.hodSignedAt = now;
-          updatedDoc.feedback = note || 'Final approval granted by Head of Department. 3 Credits awarded.';
-          newStatus = 'completed';
+          updatedDoc.feedback = note || 'Departmental approval granted for this document. Remaining internship files must also be completed before 3 credits are awarded.';
         }
 
         return updatedDoc;
@@ -443,7 +483,7 @@ export const PortalProvider = ({ children }) => {
 
       return {
         ...std,
-        status: newStatus,
+        status: getStudentOverallStatus(updatedDocs),
         documents: updatedDocs
       };
     }));
@@ -460,7 +500,7 @@ export const PortalProvider = ({ children }) => {
             [`${signerRole}SignedAt`]: now,
           };
         });
-        return { ...prev, documents: updatedDocs };
+        return { ...prev, documents: updatedDocs, status: getStudentOverallStatus(updatedDocs) };
       });
     }
 
@@ -502,9 +542,16 @@ export const PortalProvider = ({ children }) => {
     return supervisors.find(s => s.id === student.assignedSupervisorId) || null;
   };
 
+  const getStudentLiveStatus = (student) => {
+    if (!student) return 'pending_submission';
+    return getStudentOverallStatus(Array.isArray(student.documents) ? student.documents : []);
+  };
+
   // Filtered students list based on search, submissionFilter, supervisorFilter
   const getFilteredStudents = (forSupervisorId = null) => {
     return students.filter(student => {
+      const liveStatus = getStudentLiveStatus(student);
+
       // If scoped to a specific supervisor
       if (forSupervisorId && student.assignedSupervisorId !== forSupervisorId) {
         return false;
@@ -517,19 +564,18 @@ export const PortalProvider = ({ children }) => {
 
       // Submission / Status filter
       if (submissionFilter === 'pending_submission') {
-        // Students who still require to submit documents
         const hasSubmittedDocs = student.documents && student.documents.length > 0;
-        if (hasSubmittedDocs && student.status !== 'pending_submission') return false;
+        if (hasSubmittedDocs && liveStatus !== 'pending_submission') return false;
       } else if (submissionFilter === 'pending_supervisor') {
-        if (student.status !== 'pending_supervisor') return false;
+        if (liveStatus !== 'pending_supervisor') return false;
       } else if (submissionFilter === 'pending_incharge') {
-        if (student.status !== 'pending_incharge') return false;
+        if (liveStatus !== 'pending_incharge') return false;
       } else if (submissionFilter === 'pending_hod') {
-        if (student.status !== 'pending_hod') return false;
+        if (liveStatus !== 'pending_hod') return false;
       } else if (submissionFilter === 'completed') {
-        if (student.status !== 'completed') return false;
+        if (!isStudentFullyCleared(student)) return false;
       } else if (submissionFilter === 'supervisor_endorsed') {
-        if (!['pending_incharge', 'pending_hod', 'completed'].includes(student.status)) return false;
+        if (!['pending_incharge', 'pending_hod', 'completed'].includes(liveStatus)) return false;
       }
 
       // Search query filter (Name, RegNo, Company)
@@ -552,12 +598,18 @@ export const PortalProvider = ({ children }) => {
   // Counts for filter pills
   const stats = {
     totalStudents: students.length,
-    pendingSubmission: students.filter(s => (!s.documents || s.documents.length === 0) || s.status === 'pending_submission').length,
-    pendingSupervisor: students.filter(s => s.status === 'pending_supervisor').length,
-    pendingIncharge: students.filter(s => s.status === 'pending_incharge').length,
-    pendingHod: students.filter(s => s.status === 'pending_hod').length,
-    completed: students.filter(s => s.status === 'completed').length,
-    supervisorEndorsed: students.filter(s => ['pending_incharge', 'pending_hod', 'completed'].includes(s.status)).length,
+    pendingSubmission: students.filter(s => {
+      const status = getStudentOverallStatus(Array.isArray(s.documents) ? s.documents : []);
+      return (!s.documents || s.documents.length === 0) || status === 'pending_submission';
+    }).length,
+    pendingSupervisor: students.filter(s => getStudentOverallStatus(Array.isArray(s.documents) ? s.documents : []) === 'pending_supervisor').length,
+    pendingIncharge: students.filter(s => getStudentOverallStatus(Array.isArray(s.documents) ? s.documents : []) === 'pending_incharge').length,
+    pendingHod: students.filter(s => getStudentOverallStatus(Array.isArray(s.documents) ? s.documents : []) === 'pending_hod').length,
+    completed: students.filter(s => isStudentFullyCleared(s)).length,
+    supervisorEndorsed: students.filter(s => {
+      const status = getStudentOverallStatus(Array.isArray(s.documents) ? s.documents : []);
+      return ['pending_incharge', 'pending_hod', 'completed'].includes(status);
+    }).length,
   };
 
   return (
@@ -589,6 +641,7 @@ export const PortalProvider = ({ children }) => {
         downloadTemplateFile,
         getSupervisorForStudent,
         getFilteredStudents,
+        isStudentFullyCleared,
         stats,
         // Filter states
         submissionFilter,

@@ -383,9 +383,8 @@ export default function StudentDashboard({
                     <UserCheck className="w-4.5 h-4.5 text-[#c29b38]" />
                     Assigned Faculty Supervisor
                   </span>
-                  <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${
-                    supervisor ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-500'
-                  }`}>
+                  <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${supervisor ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-500'
+                    }`}>
                     {supervisor ? 'Faculty Mentor' : 'Pending'}
                   </span>
                 </div>
@@ -793,15 +792,26 @@ export default function StudentDashboard({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {templates.map((tpl) => (
-                      <tr key={tpl.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3.5 px-5 font-mono font-bold text-[#002147]">
-                          {tpl.code}
-                        </td>
-                        <td className="py-3.5 px-5">
-                          <div className="font-bold text-slate-800 text-sm">{tpl.title}</div>
-                          <div className="text-xs text-slate-500">{tpl.description}</div>
-                        </td>
+                    {templates.map((tpl) => {
+                      const submittedTemplateIds = new Set((currentUser?.documents || []).filter(doc => doc.templateId).map(doc => doc.templateId));
+                      const isSubmitted = submittedTemplateIds.has(tpl.id);
+
+                      return (
+                        <tr key={tpl.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-3.5 px-5 font-mono font-bold text-[#002147]">
+                            {tpl.code}
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <div className="font-bold text-slate-800 text-sm">{tpl.title}</div>
+                              {!isSubmitted && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200 font-bold text-[10px] uppercase tracking-wide">
+                                  Not Submitted
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-500">{tpl.description}</div>
+                          </td>
                         <td className="py-3.5 px-5">
                           <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md font-semibold text-[11px]">
                             {tpl.category}
@@ -841,8 +851,9 @@ export default function StudentDashboard({
                             </button>
                           </div>
                         </td>
-                      </tr>
-                    ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -913,12 +924,21 @@ export default function StudentDashboard({
                           <span>View Submitted Document &amp; Signatures</span>
                         </button>
                         <button
-                          onClick={() => deleteStudentDocument(currentUser.id, doc.id)}
-                          className="px-4 py-2 border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
-                          title="Delete this submitted document"
+                          onClick={() => {
+                            if (!(doc.inchargeSigned || doc.hodSigned)) {
+                              deleteStudentDocument(currentUser.id, doc.id);
+                            }
+                          }}
+                          disabled={doc.inchargeSigned || doc.hodSigned}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm ${
+                            doc.inchargeSigned || doc.hodSigned
+                              ? 'border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : 'border border-red-200 bg-red-50 hover:bg-red-100 text-red-700'
+                          }`}
+                          title={doc.inchargeSigned || doc.hodSigned ? 'This document is already approved and cannot be deleted.' : 'Delete this submitted document'}
                         >
                           <Trash2 className="w-4 h-4" />
-                          <span>Delete</span>
+                          <span>{doc.inchargeSigned || doc.hodSigned ? 'Locked' : 'Delete'}</span>
                         </button>
                       </div>
                     </div>
@@ -972,7 +992,7 @@ export default function StudentDashboard({
                         {doc.hodSigned ? (
                           <div className="mt-1 flex items-center gap-1.5 text-purple-700 font-bold text-xs">
                             <Award className="w-4 h-4" />
-                            <span>3 Credits Cleared</span>
+                            <span>Stamped</span>
                           </div>
                         ) : (
                           <div className="mt-1 flex items-center gap-1.5 text-slate-400 text-xs">

@@ -35,6 +35,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
     getFilteredStudents,
     getSupervisorForStudent,
     assignSupervisor,
+    isStudentFullyCleared,
     signDocument,
     addTemplate,
     deleteTemplate,
@@ -47,7 +48,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
   } = usePortal();
 
   const filteredStudents = getFilteredStudents();
-  const fullyEndorsedStudents = students.filter((student) => student.status === 'completed');
+  const fullyEndorsedStudents = students.filter((student) => isStudentFullyCleared(student));
 
   // ── Avatar upload ──
   const avatarInputRef = useRef(null);
@@ -186,6 +187,8 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
 
   const getStatusConfig = (student) => {
     const hasDocs = student.documents && student.documents.length > 0;
+    if (isStudentFullyCleared(student))
+      return { label: 'Fully Endorsed (3 Cr)', cls: 'bg-emerald-100 text-emerald-900 border-emerald-300', dot: 'bg-emerald-400' };
     if (!hasDocs || student.status === 'pending_submission')
       return { label: 'Requires Submission', cls: 'bg-amber-100 text-amber-900 border-amber-300', dot: 'bg-amber-400' };
     if (student.status === 'pending_supervisor')
@@ -194,7 +197,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
       return { label: 'Ready for Incharge Stamp', cls: 'bg-indigo-100 text-indigo-900 border-indigo-300', dot: 'bg-indigo-400', pulse: true };
     if (student.status === 'pending_hod')
       return { label: 'Incharge Done · With HOD', cls: 'bg-purple-100 text-purple-900 border-purple-300', dot: 'bg-purple-400' };
-    return { label: 'Fully Endorsed (3 Cr)', cls: 'bg-emerald-100 text-emerald-900 border-emerald-300', dot: 'bg-emerald-400' };
+    return { label: 'Awaiting Review', cls: 'bg-slate-100 text-slate-800 border-slate-300', dot: 'bg-slate-400' };
   };
 
   // ── Shared section banner ──
@@ -638,7 +641,13 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
   // TAB: INCHARGE SIGNATURE QUEUE
   // ═══════════════════════════════════════════════════════════════
   if (activeTab === 'incharge_signatures') {
-    const signQueue = filteredStudents.filter((s) => s.status === 'pending_incharge');
+    const signQueue = filteredStudents
+      .map((student) => ({
+        ...student,
+        pendingDocs: (student.documents || []).filter((doc) => doc.supervisorSigned && !doc.inchargeSigned),
+      }))
+      .filter((student) => student.pendingDocs.length > 0);
+
     return (
       <div className="space-y-6 fade-in">
         <SectionBanner icon={<Stamp className="w-7 h-7 text-white" />}
@@ -669,7 +678,8 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
             <div className="divide-y divide-slate-100">
               {signQueue.map((student) => {
                 const supervisor = getSupervisorForStudent(student);
-                const primaryDoc = student.documents?.[0];
+                const pendingDocs = student.pendingDocs || [];
+                const primaryDoc = pendingDocs[0] || student.documents?.[0];
                 return (
                   <div key={student.id} className="p-5 hover:bg-amber-50/30 transition-colors">
                     <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
@@ -695,18 +705,37 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
                           <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
                           Ready for Incharge Stamp
                         </span>
-                        <button onClick={() => onOpenSignatureModal('incharge', student, primaryDoc,
-                          (sigUrl, note) => { signDocument(student.id, primaryDoc.id, 'incharge', sigUrl, note); })}
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow transition-all hover:opacity-90"
-                          style={{ background: 'linear-gradient(135deg,#b45309,#d97706)' }}>
-                          <Stamp className="w-3.5 h-3.5" /> Affix Stamp
-                        </button>
-                        <button onClick={() => onOpenDocumentViewer(student, primaryDoc)}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 shadow-sm">
-                          <Eye className="w-3.5 h-3.5 text-amber-600" /> View
-                        </button>
+                        {primaryDoc && (
+                          <button onClick={() => onOpenSignatureModal('incharge', student, primaryDoc,
+                            (sigUrl, note) => { signDocument(student.id, primaryDoc.id, 'incharge', sigUrl, note); })}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow transition-all hover:opacity-90"
+                            style={{ background: 'linear-gradient(135deg,#b45309,#d97706)' }}>
+                            <Stamp className="w-3.5 h-3.5" /> Affix Stamp
+                          </button>
+                        )}
+                        {primaryDoc && (
+                          <button onClick={() => onOpenDocumentViewer(student, primaryDoc)}
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 shadow-sm">
+                            <Eye className="w-3.5 h-3.5 text-amber-600" /> View
+                          </button>
+                        )}
                       </div>
                     </div>
+                    {pendingDocs.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500 space-y-2">
+                        {pendingDocs.map((doc) => (
+                          <div key={doc.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-200 rounded-lg bg-amber-50 px-3 py-2">
+                            <span><span className="font-semibold text-slate-700">Document:</span> {doc.title} ({doc.fileName})</span>
+                            <button
+                              onClick={() => onOpenSignatureModal('incharge', student, doc, (sigUrl, note) => { signDocument(student.id, doc.id, 'incharge', sigUrl, note); })}
+                              className="px-3 py-1 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold"
+                            >
+                              Stamp This Document
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}

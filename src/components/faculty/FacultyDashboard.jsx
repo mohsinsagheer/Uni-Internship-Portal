@@ -32,6 +32,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
     signDocument,
     showToast,
     updateUserAvatar,
+    isStudentFullyCleared,
     setSubmissionFilter,
     setSearchQuery,
     setSelectedSupervisorFilter,
@@ -89,6 +90,8 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
 
   const getStatusBadge = (student) => {
     const hasDocs = student.documents && student.documents.length > 0;
+    if (isStudentFullyCleared(student))
+      return { label: 'Fully Cleared (3 Cr)', color: 'bg-emerald-100 text-emerald-900 border-emerald-300', dot: 'bg-emerald-400' };
     if (!hasDocs || student.status === 'pending_submission')
       return { label: 'Requires Submission', color: 'bg-amber-100 text-amber-900 border-amber-300', dot: 'bg-amber-400' };
     if (student.status === 'pending_supervisor')
@@ -97,7 +100,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
       return { label: 'Endorsed · With Incharge', color: 'bg-indigo-100 text-indigo-900 border-indigo-300', dot: 'bg-indigo-400' };
     if (student.status === 'pending_hod')
       return { label: 'Incharge Done · With HOD', color: 'bg-purple-100 text-purple-900 border-purple-300', dot: 'bg-purple-400' };
-    return { label: 'Fully Cleared (3 Cr)', color: 'bg-emerald-100 text-emerald-900 border-emerald-300', dot: 'bg-emerald-400' };
+    return { label: 'Awaiting Review', color: 'bg-slate-100 text-slate-800 border-slate-300', dot: 'bg-slate-400' };
   };
 
   // ── Shared profile card (used in every tab view) ──
@@ -346,7 +349,13 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
   // TAB: SIGN QUEUE
   // ═══════════════════════════════════
   if (activeTab === 'sign_queue') {
-    const signQueue = supervisedStudents.filter((s) => s.status === 'pending_supervisor');
+    const signQueue = supervisedStudents
+      .map((student) => ({
+        ...student,
+        pendingDocs: (student.documents || []).filter((doc) => doc.studentSigned && !doc.supervisorSigned),
+      }))
+      .filter((student) => student.pendingDocs.length > 0);
+
     return (
       <div className="space-y-6 fade-in">
         <SectionBanner icon={<ShieldCheck className="w-7 h-7 text-white" />} label="Action Required"
@@ -436,9 +445,11 @@ function StudentRoster({ students, onOpenSignatureModal, onOpenDocumentViewer, g
         <div className="divide-y divide-slate-100">
           {students.map((student) => {
             const hasDocs = student.documents && student.documents.length > 0;
-            const pendingStudentDoc = student.documents?.find((d) => d.studentSigned && !d.supervisorSigned);
-            const primaryDoc = student.documents?.[0];
+            const allDocs = student.documents || [];
+            const pendingDocs = student.pendingDocs || allDocs.filter((d) => d.studentSigned && !d.supervisorSigned);
+            const primaryDoc = allDocs[0];
             const status = getStatusBadge(student);
+            const activeDoc = pendingDocs[0] || primaryDoc;
             return (
               <div key={student.id} className="p-5 hover:bg-slate-50/60 transition-colors">
                 <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
@@ -471,33 +482,50 @@ function StudentRoster({ students, onOpenSignatureModal, onOpenDocumentViewer, g
                         <Send className="w-3 h-3 text-slate-500" /> Remind
                       </button>
                     )}
-                    {student.status === 'pending_supervisor' && (
-                      <button onClick={() => onOpenSignatureModal('supervisor', student, pendingStudentDoc || primaryDoc,
-                        (sigUrl, note) => { signDocument(student.id, (pendingStudentDoc || primaryDoc).id, 'supervisor', sigUrl, note); })}
+                    {student.status === 'pending_supervisor' && activeDoc && (
+                      <button onClick={() => onOpenSignatureModal('supervisor', student, activeDoc,
+                        (sigUrl, note) => { signDocument(student.id, activeDoc.id, 'supervisor', sigUrl, note); })}
                         className="px-3 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow transition-all hover:opacity-90"
                         style={{ background: 'linear-gradient(135deg,#0369a1,#0284c7)' }}>
                         <PenTool className="w-3.5 h-3.5" /> Sign / Endorse
                       </button>
                     )}
-                    {hasDocs && (
-                      <button onClick={() => onOpenDocumentViewer(student, primaryDoc)}
-                        className="px-3 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 shadow-sm transition-all">
-                        <Eye className="w-3.5 h-3.5 text-yellow-600" /> View Form
-                      </button>
-                    )}
                   </div>
                 </div>
                 {hasDocs && (
-                  <div className="mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500 flex flex-wrap items-center justify-between gap-2">
-                    <span><span className="font-semibold text-slate-700">Document:</span> {primaryDoc.title} ({primaryDoc.fileName})</span>
-                    <div className="flex items-center gap-3">
-                      <span className="flex items-center gap-1 text-emerald-700 font-semibold"><CheckCircle2 className="w-3 h-3" /> Student Signed</span>
-                      {primaryDoc.supervisorSigned && (
-                        <span className="flex items-center gap-1 text-sky-700 font-semibold">
-                          <CheckCircle2 className="w-3 h-3" /> Supervisor Endorsed ({new Date(primaryDoc.supervisorSignedAt).toLocaleDateString('en-GB')})
-                        </span>
-                      )}
-                    </div>
+                  <div className="mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500 space-y-2">
+                    {allDocs.map((doc) => {
+                      const docIsPending = doc.studentSigned && !doc.supervisorSigned;
+
+                      return (
+                        <div key={doc.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-200 rounded-lg bg-slate-50 px-3 py-2">
+                          <span><span className="font-semibold text-slate-700">Document:</span> {doc.title} ({doc.fileName})</span>
+
+                          <div className="flex items-center gap-2 flex-wrap justify-end">
+                            <button
+                              onClick={() => onOpenDocumentViewer(student, doc)}
+                              className="px-3 py-1 rounded-md bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-[10px] font-semibold flex items-center gap-1.5"
+                            >
+                              <Eye className="w-3 h-3 text-yellow-600" /> View Form
+                            </button>
+
+                            {docIsPending ? (
+                              <button
+                                onClick={() => onOpenSignatureModal('supervisor', student, doc, (sigUrl, note) => { signDocument(student.id, doc.id, 'supervisor', sigUrl, note); })}
+                                className="px-3 py-1 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold"
+                              >
+                                Sign This Document
+                              </button>
+                            ) : (
+                              <span className={`inline-flex items-center gap-1 font-semibold ${doc.supervisorSigned ? 'text-sky-700' : 'text-emerald-700'}`}>
+                                <CheckCircle2 className="w-3 h-3" />
+                                {doc.supervisorSigned ? `Supervisor Endorsed${doc.supervisorSignedAt ? ` (${new Date(doc.supervisorSignedAt).toLocaleDateString('en-GB')})` : ''}` : 'Student Signed'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

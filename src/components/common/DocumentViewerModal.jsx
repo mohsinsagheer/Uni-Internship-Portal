@@ -223,7 +223,7 @@ export default function DocumentViewerModal({
   return (
     <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm overflow-y-auto ${isStudent ? 'p-0' : 'p-3 sm:p-6'}`}>
       <div className={`bg-white shadow-2xl border border-slate-300 w-full max-h-[94vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 ${isStudent ? 'max-w-none rounded-none' : 'max-w-4xl rounded-xl'}`}>
-        
+
         {/* Modal Top Navigation Bar */}
         <div className="bg-[#001530] text-white px-5 py-3 flex items-center justify-between border-b-2 border-[#c29b38] shrink-0">
           <div className="flex items-center gap-2.5">
@@ -261,7 +261,7 @@ export default function DocumentViewerModal({
         {/* Modal Scrollable Document Container */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100/75">
           <div className={`${isStudent ? 'max-w-none' : 'max-w-3xl'} mx-auto bg-white border border-slate-300 shadow-md p-6 sm:p-8 text-slate-800 rounded-xl space-y-6`}>
-            
+
             {/* 1. OFFICIAL INSTITUTIONAL HEADER & SUBMISSION DOSSIER */}
             <div className="border-b-2 border-[#002147] pb-4">
               <div className="flex items-center justify-between gap-4">
@@ -440,7 +440,7 @@ export default function DocumentViewerModal({
 
               {/* 4-Tier Signature Cards Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 sm:gap-x-8 max-w-4xl mx-auto">
-                
+
                 {/* 1. STUDENT SIGNATURE */}
                 <div className="border border-slate-300 rounded-xl p-2.5 bg-slate-50/70 flex flex-col justify-between min-h-[130px] relative">
                   <div>
