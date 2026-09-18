@@ -1,0 +1,1053 @@
+import React, { useState, useRef } from 'react';
+import {
+  FileText,
+  UploadCloud,
+  Download,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Building2,
+  UserCheck,
+  Calendar,
+  PenTool,
+  ShieldAlert,
+  Award,
+  ArrowRight,
+  Eye,
+  FileCheck2,
+  Mail,
+  Phone,
+  Edit3,
+  Save,
+  X,
+  GraduationCap,
+  FolderOpen,
+  ShieldCheck,
+  ChevronLeft,
+  User,
+  Sparkles,
+  BookOpen,
+  Camera,
+} from 'lucide-react';
+import { usePortal, downloadTemplateFile } from '../../context/PortalContext';
+
+export default function StudentDashboard({
+  activeTab = 'dashboard',
+  setActiveTab = () => { },
+  onOpenSignatureModal,
+  onOpenDocumentViewer,
+}) {
+  const {
+    currentUser,
+    templates,
+    getSupervisorForStudent,
+    uploadStudentDocument,
+    updateUserAvatar,
+  } = usePortal();
+
+  const avatarInputRef = useRef(null);
+
+  const handleAvatarUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image size exceeds 5MB limit. Please select a smaller photo.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result && updateUserAvatar) {
+          updateUserAvatar(event.target.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const getOrdinalSuffix = (value) => {
+    const num = Number(value);
+    if (!Number.isInteger(num)) return '';
+
+    const remainder10 = num % 10;
+    const remainder100 = num % 100;
+
+    if (remainder10 === 1 && remainder100 !== 11) return 'st';
+    if (remainder10 === 2 && remainder100 !== 12) return 'nd';
+    if (remainder10 === 3 && remainder100 !== 13) return 'rd';
+    return 'th';
+  };
+
+  const formatSemester = (value) => {
+    if (!value && value !== 0) return '5th Semester';
+
+    if (typeof value === 'number') {
+      return `${value}${getOrdinalSuffix(value)} Semester`;
+    }
+
+    const match = String(value).match(/\d+/);
+    if (match) {
+      const number = Number(match[0]);
+      return `${number}${getOrdinalSuffix(number)} Semester`;
+    }
+
+    return value;
+  };
+
+  const getAcademicYearLabel = (value) => {
+    const match = String(value).match(/\d+/);
+    const semesterNumber = match ? Number(match[0]) : null;
+
+    if (semesterNumber === null) return 'Freshie';
+    if (semesterNumber > 2 && semesterNumber < 5) return 'Second Year';
+    if (semesterNumber > 4 && semesterNumber < 7) return 'Third Year';
+    if (semesterNumber > 6) return 'Senior';
+    return 'Freshie';
+  };
+
+  const supervisor = getSupervisorForStudent(currentUser);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id || '');
+  const [documentTitle, setDocumentTitle] = useState('');
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [showUploadForm, setShowUploadForm] = useState(false);
+
+  // Corporate Internship Placement edit state
+  const [editingPlacement, setEditingPlacement] = useState(false);
+  const [placementData, setPlacementData] = useState({
+    company: currentUser?.internshipCompany || 'Systems Limited',
+    role: currentUser?.internshipRole || 'Software Engineering Intern',
+    mode: currentUser?.internshipMode || 'On-site',
+    duration: currentUser?.internshipDuration || '8 Weeks (Mandatory)',
+    cgpa: currentUser?.cgpa || '3.50',
+    creditHoursCompleted: currentUser?.creditHoursCompleted || '110',
+  });
+  const [editDraft, setEditDraft] = useState({ ...placementData });
+
+  const handleSavePlacement = () => {
+    setPlacementData({ ...editDraft });
+    setEditingPlacement(false);
+  };
+  const handleCancelPlacement = () => {
+    setEditDraft({ ...placementData });
+    setEditingPlacement(false);
+  };
+
+  // Status computation
+  const hasDocuments = currentUser?.documents && currentUser.documents.length > 0;
+  const isCompleted = currentUser?.status === 'completed';
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setUploadedFile(file);
+      if (!documentTitle) {
+        setDocumentTitle(file.name.replace(/\.[^/.]+$/, ''));
+      }
+    }
+  };
+
+  const handleStartSubmission = () => {
+    if (!uploadedFile) {
+      alert('Please select a document file to upload.');
+      return;
+    }
+
+    const tpl = templates.find((t) => t.id === selectedTemplateId) || templates[0];
+    const subTitle = documentTitle || (tpl ? tpl.title : uploadedFile.name);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const fileDataUrl = reader.result;
+      onOpenSignatureModal('student', currentUser, {
+        title: subTitle,
+        onSigned: (signatureDataUrl) => {
+          uploadStudentDocument(currentUser.id, {
+            templateId: selectedTemplateId || (tpl ? tpl.id : null),
+            title: subTitle,
+            fileName: uploadedFile.name,
+            fileSize: `${Math.round(uploadedFile.size / 1024)} KB`,
+            fileDataUrl,
+            studentSignatureDataUrl: signatureDataUrl,
+          });
+          setShowUploadForm(false);
+          setUploadedFile(null);
+          setDocumentTitle('');
+        },
+      });
+    };
+    reader.readAsDataURL(uploadedFile);
+  };
+
+  return (
+    <div className="space-y-6 w-full">
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 1. STUDENT DASHBOARD TAB (Only when activeTab === 'dashboard')       */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {(activeTab === 'dashboard' || !activeTab) && (
+        <div className="space-y-6">
+
+          {/* ── WIDE & PROFESSIONAL STUDENT PROFILE CARD ── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+            {/* Top Navy/Gold Banner Header */}
+            <div className="px-6 py-4 bg-gradient-to-r from-[#001530] via-[#002147] to-[#0b3569] border-b-2 border-[#c29b38] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
+                  <GraduationCap className="w-5 h-5 text-[#c29b38]" />
+                </div>
+                <div>
+                  <h2 className="font-serif font-black text-white text-base sm:text-lg tracking-wide uppercase">
+                    Official Student Internship Dossier
+                  </h2>
+                  <p className="text-xs text-slate-300">
+                    COMSATS University Islamabad · Student Affairs &amp; Department of Computer Science
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab && setActiveTab('directives')}
+                  className="px-3 py-1.5 bg-[#c29b38]/20 hover:bg-[#c29b38]/30 border border-[#c29b38]/50 text-[#facc15] font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
+                  title="View Official University Internship Directives"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-[#facc15]" />
+                  <span>Internship Directives</span>
+                </button>
+                <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold rounded-full flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Active Enrolled
+                </span>
+                <span className="px-3 py-1 bg-[#c29b38]/20 border border-[#c29b38]/40 text-[#facc15] font-mono text-xs font-bold rounded-full">
+                  Fall 2026 Term
+                </span>
+              </div>
+            </div>
+
+            {/* Profile Body: Photo + Primary Info + Metrics Grid */}
+            <div className="p-6 sm:p-8">
+              <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 pb-6 border-b border-slate-100">
+                {/* Student Identity Left Block */}
+                <div className="flex items-start sm:items-center gap-5">
+                  <div className="relative shrink-0 group">
+                    <input
+                      type="file"
+                      ref={avatarInputRef}
+                      onChange={handleAvatarUpload}
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      className="hidden"
+                    />
+                    <div
+                      onClick={() => avatarInputRef.current?.click()}
+                      className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border-3 border-[#002147] group-hover:border-[#c29b38] shadow-xl relative cursor-pointer transition-all"
+                      title="Click to upload or change profile picture"
+                    >
+                      <img
+                        src={currentUser?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=260&q=80'}
+                        alt={currentUser?.name}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                      {/* Hover Overlay with Camera Icon */}
+                      <div className="absolute inset-0 bg-[#001736]/65 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white p-1">
+                        <Camera className="w-6 h-6 text-[#facc15] mb-1" />
+                        <span className="text-[10px] font-bold text-center leading-tight">Change Photo</span>
+                      </div>
+                    </div>
+
+                    {/* Camera Upload Badge Button */}
+                    <button
+                      type="button"
+                      onClick={() => avatarInputRef.current?.click()}
+                      className="absolute -bottom-1.5 -right-1.5 bg-[#002147] hover:bg-[#c29b38] text-white hover:text-[#001530] p-2 rounded-full shadow-xl border-2 border-white transition-all z-10"
+                      title="Upload or Change Profile Photo"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <h3 className="font-serif font-black text-2xl sm:text-3xl text-[#002147] leading-tight">
+                        {currentUser?.name}
+                      </h3>
+                      <span className="px-3 py-1 bg-sky-50 text-sky-800 border border-sky-200 text-xs font-bold rounded-lg font-mono">
+                        {currentUser?.regNo}
+                      </span>
+                    </div>
+
+                    <p className="text-sm font-bold text-slate-700">
+                      {currentUser?.program || 'Bachelor of Science in Computer Science'}
+                    </p>
+                    <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{currentUser?.department || 'Department of Computer Science'} · Islamabad Campus</span>
+                    </p>
+                    <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="font-mono">{currentUser?.email || `${currentUser?.regNo?.toLowerCase()}@isb.comsats.edu.pk`}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Overall Clearance Status Ribbon */}
+                <div className="w-full xl:w-auto p-4 rounded-xl bg-slate-50 border border-slate-200 flex sm:flex-row xl:flex-col justify-between items-start sm:items-center xl:items-end gap-3">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">
+                      Internship Clearance
+                    </span>
+                    <div className="text-sm font-bold mt-0.5 flex items-center gap-1.5">
+                      {isCompleted ? (
+                        <span className="text-emerald-700 flex items-center gap-1">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          Fully Cleared (3 Credits Awarded)
+                        </span>
+                      ) : hasDocuments ? (
+                        <span className="text-sky-700 flex items-center gap-1">
+                          <Clock className="w-4 h-4 text-sky-600" />
+                          Dossier Submitted · Review Underway
+                        </span>
+                      ) : (
+                        <span className="text-amber-700 flex items-center gap-1">
+                          <AlertCircle className="w-4 h-4 text-amber-600" />
+                          Pending Submission
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <span className="text-[11px] font-semibold text-slate-500 bg-white px-3 py-1 rounded-lg border border-slate-200">
+                    Official Term: Fall 2026
+                  </span>
+                </div>
+              </div>
+
+              {/* Academic & Internship Progress Highlights Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Semester
+                  </span>
+                  <div className="text-base font-extrabold text-[#002147] mt-1">
+                    {formatSemester(currentUser?.semester)}
+                  </div>
+                  <span className="text-[10px] text-slate-400">{getAcademicYearLabel(currentUser?.semester)}</span>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Cumulative GPA
+                  </span>
+                  <div className="text-base font-extrabold text-emerald-700 font-mono mt-1">
+                    {currentUser?.cgpa || placementData.cgpa} / 4.00
+                  </div>
+                  <span className="text-[10px] text-emerald-600 font-medium">Eligible for Internship</span>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Credit Hours Completed
+                  </span>
+                  <div className="text-base font-extrabold text-[#002147] font-mono mt-1">
+                    {currentUser?.creditHoursCompleted || placementData.creditHoursCompleted} Cr
+                  </div>
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                    <div className="bg-[#002147] h-full rounded-full" style={{ width: '82%' }}></div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Degree Requirement
+                  </span>
+                  <div className="text-base font-extrabold text-[#c29b38] mt-1">
+                    Mandatory 3 Cr
+                  </div>
+                  <span className="text-[10px] text-slate-500">HEC Pakistan Standard</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── TWO-COLUMN SECTION: Supervisor & Editable Corporate Placement ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* 1. Assigned Faculty Supervisor Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                  <span className="text-xs font-black text-[#002147] uppercase tracking-wider flex items-center gap-2">
+                    <UserCheck className="w-4.5 h-4.5 text-[#c29b38]" />
+                    Assigned Faculty Supervisor
+                  </span>
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 font-bold">
+                    Faculty Mentor
+                  </span>
+                </div>
+
+                {supervisor ? (
+                  <div className="flex items-start gap-4">
+                    <img
+                      src={supervisor.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80'}
+                      alt={supervisor.name}
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-sky-500 shadow-md shrink-0"
+                    />
+                    <div className="space-y-1">
+                      <h4 className="font-bold text-base text-[#002147] leading-tight">
+                        {supervisor.name}
+                      </h4>
+                      <p className="text-xs text-sky-800 font-semibold">
+                        {supervisor.designation} · {supervisor.department}
+                      </p>
+                      <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
+                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Office: {supervisor.office}</span>
+                      </p>
+                      <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="font-mono">{supervisor.email}</span>
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-6 bg-amber-50/70 border border-dashed border-amber-300 rounded-xl text-center">
+                    <AlertCircle className="w-7 h-7 text-amber-600 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-amber-900">No Supervisor Allocated Yet</p>
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      The Internship Incharge will assign a faculty mentor to evaluate your dossier.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 flex justify-between items-center">
+                <span>Role: Academic Verification &amp; Evaluation</span>
+                <span className="text-emerald-700 font-bold">Active Academic Term</span>
+              </div>
+            </div>
+
+            {/* 2. Corporate Internship Placement Card (Editable) */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                  <span className="text-xs font-black text-[#002147] uppercase tracking-wider flex items-center gap-2">
+                    <Building2 className="w-4.5 h-4.5 text-[#c29b38]" />
+                    Corporate Internship Placement
+                  </span>
+                  {!editingPlacement ? (
+                    <button
+                      onClick={() => {
+                        setEditDraft({ ...placementData });
+                        setEditingPlacement(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 hover:bg-[#002147] hover:text-white text-slate-700 rounded-lg text-xs font-bold transition-all group"
+                      title="Edit corporate internship details"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-[#c29b38]" />
+                      Edit Placement
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleSavePlacement}
+                        className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        Save
+                      </button>
+                      <button
+                        onClick={handleCancelPlacement}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {!editingPlacement ? (
+                  <div className="space-y-2.5 text-xs">
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-500 font-medium">Host Enterprise:</span>
+                      <span className="font-bold text-slate-900">{placementData.company}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-500 font-medium">Job Role / Designation:</span>
+                      <span className="font-semibold text-slate-800">{placementData.role}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-500 font-medium">Internship Mode:</span>
+                      <span className="font-semibold text-slate-800">{placementData.mode}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-500 font-medium">Duration:</span>
+                      <span className="font-semibold text-slate-800">{placementData.duration}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-500 font-medium">Credit Hours Completed:</span>
+                      <span className="font-semibold text-slate-800 font-mono">{currentUser?.creditHoursCompleted || placementData.creditHoursCompleted}</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-slate-500 font-medium">Verification Status:</span>
+                      <span className="font-bold text-emerald-700">Enterprise Verified</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Host Enterprise / Company:</label>
+                      <input
+                        type="text"
+                        value={editDraft.company}
+                        onChange={(e) => setEditDraft({ ...editDraft, company: e.target.value })}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#002147] text-xs font-semibold"
+                        placeholder="e.g. Systems Limited, Jazz, Nayatel"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Job Role / Designation:</label>
+                      <input
+                        type="text"
+                        value={editDraft.role}
+                        onChange={(e) => setEditDraft({ ...editDraft, role: e.target.value })}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#002147] text-xs font-semibold"
+                        placeholder="e.g. Software Engineering Intern"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Internship Mode:</label>
+                      <select
+                        value={editDraft.mode}
+                        onChange={(e) => setEditDraft({ ...editDraft, mode: e.target.value })}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#002147] text-xs font-semibold"
+                      >
+                        <option value="On-site">On-site</option>
+                        <option value="Remote">Remote</option>
+                        <option value="Hybrid">Hybrid</option>
+                        <option value="Virtual">Virtual</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Duration:</label>
+                      <input
+                        type="text"
+                        value={editDraft.duration}
+                        onChange={(e) => setEditDraft({ ...editDraft, duration: e.target.value })}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#002147] text-xs font-semibold"
+                        placeholder="e.g. 8 Weeks (Mandatory)"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Credit Hours Completed:</label>
+                      <input
+                        type="text"
+                        value={editDraft.creditHoursCompleted}
+                        onChange={(e) => setEditDraft({ ...editDraft, creditHoursCompleted: e.target.value })}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#002147] text-xs font-semibold"
+                        placeholder="e.g. 110"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 flex justify-between items-center">
+                <span>Official Evaluation Dossier</span>
+                <span className="text-[#002147] font-bold">Fall 2026</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── QUICK PORTAL NAVIGATION SHORTCUT CARDS ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div
+              onClick={() => setActiveTab('templates')}
+              className="p-5 rounded-2xl bg-white border border-slate-200 hover:border-[#c29b38] shadow-md hover:shadow-xl transition-all cursor-pointer group flex items-center justify-between"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-blue-50 group-hover:bg-[#002147] text-[#002147] group-hover:text-white flex items-center justify-center transition-all">
+                  <FolderOpen className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-[#002147] group-hover:text-[#c29b38] transition-colors">
+                    University Document Templates
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Download standard forms &amp; upload signed documents
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-[#002147] group-hover:translate-x-1 transition-all" />
+            </div>
+
+            <div
+              onClick={() => setActiveTab('submissions')}
+              className="p-5 rounded-2xl bg-white border border-slate-200 hover:border-[#c29b38] shadow-md hover:shadow-xl transition-all cursor-pointer group flex items-center justify-between"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-emerald-50 group-hover:bg-emerald-700 text-emerald-700 group-hover:text-white flex items-center justify-center transition-all">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-[#002147] group-hover:text-[#c29b38] transition-colors">
+                    Submitted Documents &amp; Signatures
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Track multi-tier approval progress across faculty &amp; HOD
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-emerald-700 group-hover:translate-x-1 transition-all" />
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 2. UNIVERSITY PRE-UPLOADED TEMPLATES TAB (Only on 'templates')      */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'templates' && (
+        <div className="space-y-5">
+          {/* Navigation Bar Header */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-[#002147] transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Back to Student Dashboard</span>
+            </button>
+            <span className="text-xs text-slate-500 font-medium">Standard University Forms Repository</span>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+            <div className="px-6 py-4 bg-gradient-to-r from-[#001530] via-[#002147] to-[#0b3569] border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-white">
+              <div>
+                <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2">
+                  <FileText className="w-4.5 h-4.5 text-[#c29b38]" />
+                  <span>University Pre-Uploaded Internship Templates</span>
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Download standard university forms, complete details, and upload with your digital signature.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowUploadForm(!showUploadForm)}
+                className="px-4 py-2 bg-[#c29b38] hover:bg-[#a68022] text-[#001530] text-xs font-black rounded-xl shadow-lg transition-all flex items-center gap-2"
+              >
+                <UploadCloud className="w-4 h-4" />
+                <span>Submit Internship Document &amp; Sign</span>
+              </button>
+            </div>
+
+            {/* Upload Form Accordion / Slide-down */}
+            {showUploadForm && (
+              <div className="p-6 bg-blue-50/50 border-b border-slate-200">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-[#002147] mb-3 flex items-center gap-2">
+                  <PenTool className="w-4 h-4 text-[#c29b38]" />
+                  <span>Submit Document for Faculty Supervisor Endorsement</span>
+                </h4>
+
+                {templates.length === 0 ? (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2.5">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                    <div>
+                      <span className="font-bold">No templates published yet:</span> The Internship Incharge Office has not uploaded any official forms yet. You will be able to submit once templates are published to the portal repository.
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">
+                          Select Relevant Form Template:
+                        </label>
+                        <select
+                          value={selectedTemplateId}
+                          onChange={(e) => setSelectedTemplateId(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#002147]"
+                        >
+                          {templates.map((tpl) => (
+                            <option key={tpl.id} value={tpl.id}>
+                              {tpl.code}: {tpl.title}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">
+                          Custom Submission Title:
+                        </label>
+                        <input
+                          type="text"
+                          value={documentTitle}
+                          onChange={(e) => setDocumentTitle(e.target.value)}
+                          placeholder="e.g. FA21-BCS-045 Internship Completion Form"
+                          className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#002147]"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block font-bold text-slate-700 mb-1">
+                          Select Document File (PDF / Scanned report):
+                        </label>
+                        <input
+                          type="file"
+                          onChange={handleFileChange}
+                          accept=".pdf,.doc,.docx,.png,.jpg"
+                          className="w-full text-xs text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#002147] file:text-white hover:file:bg-[#003366] cursor-pointer border border-slate-300 rounded-xl bg-white p-1"
+                        />
+                        {uploadedFile && (
+                          <p className="text-[10px] text-emerald-700 font-semibold mt-1 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> Selected: {uploadedFile.name} ({Math.round(uploadedFile.size / 1024)} KB)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Notice about Student Digital Signature */}
+                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+                      <ShieldAlert className="w-4.5 h-4.5 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">Digital Signature Requirement:</span> Upon clicking continue, you will draw your handwritten signature on the official digital canvas pad. Students can only sign in their designated box.
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowUploadForm(false)}
+                        className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleStartSubmission}
+                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2"
+                      >
+                        <PenTool className="w-4 h-4" />
+                        <span>Continue to Canvas Signature &amp; Submit</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Templates Table */}
+            {templates.length === 0 ? (
+              <div className="p-12 text-center bg-white">
+                <FolderOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <h4 className="font-bold text-slate-800 text-base">No University Document Templates Available</h4>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  The university template repository is currently empty. The Internship Incharge will publish official forms and documents here for download.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100/90 text-[#002147] border-b border-slate-200 font-bold uppercase tracking-wider text-[11px]">
+                      <th className="py-3 px-5">Form Code</th>
+                      <th className="py-3 px-5">Document Title</th>
+                      <th className="py-3 px-5">Category</th>
+                      <th className="py-3 px-5">Uploaded By</th>
+                      <th className="py-3 px-5">Signatures Required</th>
+                      <th className="py-3 px-5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {templates.map((tpl) => (
+                      <tr key={tpl.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3.5 px-5 font-mono font-bold text-[#002147]">
+                          {tpl.code}
+                        </td>
+                        <td className="py-3.5 px-5">
+                          <div className="font-bold text-slate-800 text-sm">{tpl.title}</div>
+                          <div className="text-xs text-slate-500">{tpl.description}</div>
+                        </td>
+                        <td className="py-3.5 px-5">
+                          <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md font-semibold text-[11px]">
+                            {tpl.category}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-5 text-slate-600 font-medium">
+                          {tpl.uploadedBy}
+                        </td>
+                        <td className="py-3.5 px-5">
+                          <div className="flex gap-1.5 flex-wrap">
+                            {tpl.requiredSignatures.map((sig) => (
+                              <span
+                                key={sig}
+                                className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${sig === 'student'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : sig === 'supervisor'
+                                    ? 'bg-sky-100 text-sky-800'
+                                    : sig === 'incharge'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-purple-100 text-purple-800'
+                                  }`}
+                              >
+                                {sig}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-5 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => downloadTemplateFile(tpl)}
+                              className="px-3 py-1.5 bg-white border border-slate-300 hover:border-[#002147] hover:text-[#002147] text-slate-700 rounded-lg font-bold text-xs transition-colors inline-flex items-center gap-1.5 shadow-sm"
+                              title="Download official template as uploaded"
+                            >
+                              <Download className="w-3.5 h-3.5 text-[#c29b38]" />
+                              <span>Download</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 3. SUBMISSIONS & CLEARANCE TAB (Only on submissions / clearance)    */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {(activeTab === 'submissions' || activeTab === 'clearance') && (
+        <div className="space-y-5">
+          {/* Navigation Bar Header */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-[#002147] transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Back to Student Dashboard</span>
+            </button>
+            <span className="text-xs text-slate-500 font-medium">Multi-Tier Approval Pipeline</span>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+            <div className="px-6 py-4 bg-gradient-to-r from-[#001530] via-[#002147] to-[#0b3569] border-b border-slate-200 flex items-center justify-between text-white">
+              <div>
+                <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2">
+                  <FileCheck2 className="w-4.5 h-4.5 text-emerald-400" />
+                  <span>My Submitted Internship Documents &amp; Approval Progress</span>
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Track multi-tier signatures across Student, Faculty Supervisor, Incharge, and HOD.
+                </p>
+              </div>
+
+              <span className="text-xs font-bold text-[#001530] bg-[#c29b38] px-3 py-1 rounded-full">
+                {currentUser?.documents?.length || 0} Submitted
+              </span>
+            </div>
+
+            {currentUser?.documents && currentUser.documents.length > 0 ? (
+              <div className="divide-y divide-slate-100">
+                {currentUser.documents.map((doc) => (
+                  <div key={doc.id} className="p-6 hover:bg-slate-50 transition-colors">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2.5">
+                          <h4 className="font-bold text-base text-[#002147]">
+                            {doc.title}
+                          </h4>
+                          <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                            {doc.fileSize}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Submitted on: {new Date(doc.submittedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => onOpenDocumentViewer(currentUser, doc)}
+                          className="px-4 py-2 bg-[#002147] hover:bg-[#003366] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md hover:shadow-lg"
+                        >
+                          <Eye className="w-4 h-4 text-[#c29b38]" />
+                          <span>View Official Letterhead &amp; Signatures</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 4-Tier Signature Pipeline Status Indicators */}
+                    <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      {/* Student Signature */}
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">1. Student</span>
+                        <div className="mt-1 flex items-center gap-1.5 text-emerald-700 font-bold text-xs">
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Drawn on Canvas</span>
+                        </div>
+                      </div>
+
+                      {/* Supervisor Signature */}
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">2. Supervisor</span>
+                        {doc.supervisorSigned ? (
+                          <div className="mt-1 flex items-center gap-1.5 text-emerald-700 font-bold text-xs">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Signed &amp; Endorsed</span>
+                          </div>
+                        ) : (
+                          <div className="mt-1 flex items-center gap-1.5 text-sky-700 font-medium text-xs">
+                            <Clock className="w-4 h-4" />
+                            <span>Under Review</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Incharge Signature */}
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">3. Incharge</span>
+                        {doc.inchargeSigned ? (
+                          <div className="mt-1 flex items-center gap-1.5 text-emerald-700 font-bold text-xs">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Stamped</span>
+                          </div>
+                        ) : (
+                          <div className="mt-1 flex items-center gap-1.5 text-slate-400 text-xs">
+                            <Clock className="w-4 h-4" />
+                            <span>Pending Stage 2</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* HOD Signature */}
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">4. HOD</span>
+                        {doc.hodSigned ? (
+                          <div className="mt-1 flex items-center gap-1.5 text-purple-700 font-bold text-xs">
+                            <Award className="w-4 h-4" />
+                            <span>3 Credits Cleared</span>
+                          </div>
+                        ) : (
+                          <div className="mt-1 flex items-center gap-1.5 text-slate-400 text-xs">
+                            <Clock className="w-4 h-4" />
+                            <span>Awaiting HOD</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-10 text-center bg-white">
+                <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3 opacity-80" />
+                <h4 className="font-bold text-slate-800 text-base">No Documents Submitted Yet</h4>
+                <p className="text-xs text-slate-500 mt-1.5 max-w-md mx-auto">
+                  You have not submitted your internship forms yet. Open "University Document Templates" to download the official forms and submit them with your digital canvas signature.
+                </p>
+                <button
+                  onClick={() => setActiveTab('templates')}
+                  className="mt-4 px-5 py-2.5 bg-[#002147] hover:bg-[#003366] text-white text-xs font-bold rounded-xl shadow-lg transition-all inline-flex items-center gap-2"
+                >
+                  <UploadCloud className="w-4 h-4 text-[#c29b38]" />
+                  <span>Go to Templates &amp; Submit</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 4. MY SUPERVISOR TAB (Only on 'my_supervisor')                     */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'my_supervisor' && (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-[#002147] transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Back to Student Dashboard</span>
+            </button>
+            <span className="text-xs text-slate-500 font-medium">Faculty Supervision Dossier</span>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl p-6 sm:p-8">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-4 mb-6">
+              <UserCheck className="w-6 h-6 text-[#c29b38]" />
+              <div>
+                <h3 className="font-serif font-black text-xl text-[#002147]">
+                  My Assigned Faculty Supervisor
+                </h3>
+                <p className="text-xs text-slate-500">Official Departmental Mentor for Internship Evaluation &amp; Logbook Verification</p>
+              </div>
+            </div>
+
+            {supervisor ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                <div className="flex flex-col items-center text-center p-6 bg-slate-50 rounded-2xl border border-slate-200">
+                  <img
+                    src={supervisor.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=260&q=80'}
+                    alt={supervisor.name}
+                    className="w-28 h-28 rounded-2xl object-cover border-3 border-[#002147] shadow-lg mb-3"
+                  />
+                  <h4 className="font-bold text-base text-[#002147]">{supervisor.name}</h4>
+                  <p className="text-xs text-sky-800 font-semibold">{supervisor.designation}</p>
+                  <p className="text-xs text-slate-500 mt-1">{supervisor.department}</p>
+                  <span className="mt-3 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    Active Faculty Mentor
+                  </span>
+                </div>
+
+                <div className="md:col-span-2 space-y-4">
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
+                    <div className="flex justify-between py-1 border-b border-slate-200">
+                      <span className="text-slate-500 font-medium">Email Address:</span>
+                      <span className="font-mono font-bold text-[#002147]">{supervisor.email}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-200">
+                      <span className="text-slate-500 font-medium">Faculty Office:</span>
+                      <span className="font-semibold text-slate-800">{supervisor.office}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-200">
+                      <span className="text-slate-500 font-medium">Department:</span>
+                      <span className="font-semibold text-slate-800">{supervisor.department}</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-slate-500 font-medium">Clearance Authority:</span>
+                      <span className="font-bold text-emerald-700">Stage 2 Endorsement &amp; Rubric</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 text-xs text-blue-900">
+                    <h5 className="font-bold mb-1">Supervisor Meeting &amp; Logbook Instructions</h5>
+                    <p className="text-slate-600 leading-relaxed">
+                      Students are advised to share their weekly task progress and draft report with the supervisor prior to final clearance submission. All forms uploaded on the portal will immediately appear in your supervisor's review queue.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center bg-amber-50 rounded-2xl border border-dashed border-amber-300">
+                <AlertCircle className="w-10 h-10 text-amber-600 mx-auto mb-2" />
+                <h4 className="font-bold text-amber-900">Supervisor Allocation Pending</h4>
+                <p className="text-xs text-amber-700 mt-1 max-w-md mx-auto">
+                  The departmental Internship Incharge has not yet allocated a faculty supervisor to your registration number. Please check back shortly.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
