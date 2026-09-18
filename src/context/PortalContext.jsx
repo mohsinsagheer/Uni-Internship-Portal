@@ -370,6 +370,36 @@ export const PortalProvider = ({ children }) => {
     showToast('Internship document uploaded & signed successfully! Forwarded to Faculty Supervisor.');
   };
 
+  // Student deletes a submitted document from their submission history
+  const deleteStudentDocument = (studentId, docId) => {
+    const removed = (students.find(std => std.id === studentId)?.documents || []).find(doc => doc.id === docId);
+    if (!removed) return;
+
+    setStudents(prev => prev.map(std => {
+      if (std.id !== studentId) return std;
+
+      const updatedDocs = (std.documents || []).filter(doc => doc.id !== docId);
+      return {
+        ...std,
+        documents: updatedDocs,
+        status: updatedDocs.length === 0 ? 'pending_submission' : std.status,
+      };
+    }));
+
+    if (currentUser?.id === studentId) {
+      setCurrentUser(prev => {
+        const updatedDocs = (prev.documents || []).filter(doc => doc.id !== docId);
+        return {
+          ...prev,
+          documents: updatedDocs,
+          status: updatedDocs.length === 0 ? 'pending_submission' : prev.status,
+        };
+      });
+    }
+
+    showToast(`Document "${removed.title}" deleted from your submissions.`);
+  };
+
   // Multi-tier signature application
   const signDocument = (studentId, docId, signerRole, signatureDataUrl, note = '') => {
     const now = new Date().toISOString();
@@ -551,6 +581,7 @@ export const PortalProvider = ({ children }) => {
         switchRole,
         assignSupervisor,
         uploadStudentDocument,
+        deleteStudentDocument,
         updateUserAvatar,
         signDocument,
         addTemplate,

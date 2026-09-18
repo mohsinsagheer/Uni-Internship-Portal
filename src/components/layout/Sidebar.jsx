@@ -16,17 +16,13 @@ import {
 import { usePortal } from '../../context/PortalContext';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
-  const { currentUser, getSupervisorForStudent, stats, templates = [] } = usePortal();
-
-  const assignedSupervisor =
-    currentUser?.role === 'student' ? getSupervisorForStudent(currentUser) : null;
+  const { currentUser, stats, templates = [] } = usePortal();
 
   const getNavItems = () => {
     switch (currentUser?.role) {
       case 'student':
         return [
           { id: 'dashboard', label: 'Student Dashboard', icon: LayoutDashboard, description: 'Overview & academic dossier' },
-          { id: 'my_supervisor', label: 'My Faculty Supervisor', icon: Users, badge: assignedSupervisor ? 'Assigned' : 'Pending', description: 'Assigned supervisor details' },
           { id: 'templates', label: 'University Documents', icon: FolderOpen, count: templates.length, description: 'Official forms & download' },
           { id: 'submissions', label: 'My Submissions & Sign', icon: ShieldCheck, description: 'Track signatures & approvals' },
         ];
