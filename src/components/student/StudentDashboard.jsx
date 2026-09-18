@@ -111,6 +111,7 @@ export default function StudentDashboard({
   const [documentTitle, setDocumentTitle] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [showUploadForm, setShowUploadForm] = useState(false);
+  const [submissionError, setSubmissionError] = useState('');
 
   // Corporate Internship Placement edit state
   const [editingPlacement, setEditingPlacement] = useState(false);
@@ -141,6 +142,7 @@ export default function StudentDashboard({
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setUploadedFile(file);
+      setSubmissionError('');
       if (!documentTitle) {
         setDocumentTitle(file.name.replace(/\.[^/.]+$/, ''));
       }
@@ -149,9 +151,10 @@ export default function StudentDashboard({
 
   const handleStartSubmission = () => {
     if (!uploadedFile) {
-      alert('Please select a document file to upload.');
+      setSubmissionError('Please attach a document file before continuing to the canvas signature step.');
       return;
     }
+    setSubmissionError('');
 
     const tpl = templates.find((t) => t.id === selectedTemplateId) || templates[0];
     const subTitle = documentTitle || (tpl ? tpl.title : uploadedFile.name);
@@ -739,6 +742,13 @@ export default function StudentDashboard({
                     <span className="font-bold">Digital Signature Requirement:</span> Upon clicking continue, you will draw your handwritten signature on the official digital canvas pad. Students can only sign in their designated box.
                   </div>
                 </div>
+
+                {submissionError && (
+                  <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <span>{submissionError}</span>
+                  </div>
+                )}
 
                 <div className="mt-4 flex justify-end gap-3">
                   <button

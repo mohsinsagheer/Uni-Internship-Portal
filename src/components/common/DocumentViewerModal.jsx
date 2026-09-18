@@ -239,17 +239,6 @@ export default function DocumentViewerModal({
           </div>
 
           <div className="flex items-center gap-2">
-            {!isStudent && fileDataUrl && (
-              <button
-                type="button"
-                onClick={handleOpenExternal}
-                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Open in new window"
-              >
-                <ExternalLink className="w-3.5 h-3.5 text-[#facc15]" />
-                <span className="hidden sm:inline">Open</span>
-              </button>
-            )}
             <button
               type="button"
               onClick={handleDownload}
@@ -259,17 +248,6 @@ export default function DocumentViewerModal({
               <Download className="w-3.5 h-3.5 text-[#facc15]" />
               <span>Download</span>
             </button>
-            {!isStudent && (
-              <button
-                type="button"
-                onClick={handlePrint}
-                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Print Document"
-              >
-                <Printer className="w-3.5 h-3.5 text-[#facc15]" />
-                <span>Print</span>
-              </button>
-            )}
             <button
               type="button"
               onClick={onClose}
@@ -608,7 +586,10 @@ export default function DocumentViewerModal({
                         {currentUser?.role === 'incharge' ? (
                           <button
                             type="button"
-                            onClick={() => onOpenSignatureModal('incharge', currentStudent, currentDoc)}
+                            onClick={() => {
+                              onClose();
+                              onOpenSignatureModal('incharge', currentStudent, currentDoc);
+                            }}
                             className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer"
                           >
                             <Stamp className="w-3.5 h-3.5 text-white" />

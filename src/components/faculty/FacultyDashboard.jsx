@@ -226,12 +226,6 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2.5">
-                  {savedProfile.email && (
-                    <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
-                      style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.80)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(6px)' }}>
-                      <Mail className="w-4 h-4 text-sky-300 shrink-0" />{savedProfile.email}
-                    </span>
-                  )}
                   {savedProfile.phone && (
                     <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
                       style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.80)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(6px)' }}>
