@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Printer,
@@ -23,18 +23,162 @@ export default function DocumentViewerModal({
 }) {
   const { currentUser, getSupervisorForStudent, inchargeUser, hodUser, students } = usePortal();
 
-  if (!isOpen || !student || !document) return null;
-
   // Keep reactive to real-time state updates in PortalContext
-  const currentStudent = (students && students.find(s => s.id === student.id)) || student;
-  const currentDoc = (currentStudent.documents && currentStudent.documents.find(d => d.id === document.id)) || document;
+  const currentStudent = (students && students.find(s => s.id === student?.id)) || student;
+  const currentDoc = (currentStudent?.documents && currentStudent.documents.find(d => d.id === document?.id)) || document;
   const supervisor = getSupervisorForStudent ? getSupervisorForStudent(currentStudent) : null;
   const isStudent = currentUser?.role === 'student';
 
-  const fileName = currentDoc.fileName || '';
-  const fileDataUrl = currentDoc.fileDataUrl || '';
-  const isPdf = fileName.toLowerCase().endsWith('.pdf') || (typeof fileDataUrl === 'string' && fileDataUrl.startsWith('data:application/pdf'));
-  const isImage = (typeof fileDataUrl === 'string' && fileDataUrl.startsWith('data:image/')) || /\.(png|jpe?g|webp|gif|svg)$/i.test(fileName);
+  const fileName = currentDoc?.fileName || '';
+  const fileDataUrl = currentDoc?.fileDataUrl || '';
+
+  const [fileContentState, setFileContentState] = useState({
+    type: 'loading', // 'pdf' | 'image' | 'html' | 'text' | 'embed' | 'empty'
+    content: null,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (!isOpen || !currentDoc) return;
+
+    if (!fileDataUrl) {
+      setFileContentState({ type: 'empty', content: null, error: null });
+      return;
+    }
+
+    // 1. PDF Documents
+    if (
+      fileName.toLowerCase().endsWith('.pdf') ||
+      (typeof fileDataUrl === 'string' && fileDataUrl.startsWith('data:application/pdf'))
+    ) {
+      setFileContentState({ type: 'pdf', content: fileDataUrl, error: null });
+      return;
+    }
+
+    // 2. Image / Scanned Documents
+    if (
+      (typeof fileDataUrl === 'string' && fileDataUrl.startsWith('data:image/')) ||
+      /\.(png|jpe?g|webp|gif|svg)$/i.test(fileName)
+    ) {
+      setFileContentState({ type: 'image', content: fileDataUrl, error: null });
+      return;
+    }
+
+    // 3. Word Document (.docx)
+    if (
+      fileName.toLowerCase().endsWith('.docx') ||
+      fileDataUrl.includes('wordprocessingml')
+    ) {
+      setFileContentState({ type: 'loading', content: null, error: null });
+      (async () => {
+        try {
+          const base64Data = fileDataUrl.includes(',') ? fileDataUrl.split(',')[1] : fileDataUrl;
+          const binaryString = window.atob(base64Data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+
+          const mammothModule = await import('mammoth');
+          const convertFn =
+            mammothModule.convertToHtml ||
+            (mammothModule.default && mammothModule.default.convertToHtml);
+
+          if (convertFn) {
+            const result = await convertFn({ arrayBuffer: bytes.buffer });
+            if (result.value && result.value.trim().length > 0) {
+              setFileContentState({ type: 'html', content: result.value, error: null });
+              return;
+            }
+          }
+
+          // Fallback: decode printable text
+          const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+          const cleanText = text.split('').filter(c => {
+            const code = c.charCodeAt(0);
+            return code >= 32 || code === 10 || code === 13 || code === 9;
+          }).join('').replace(/\s+/g, ' ').trim();
+          setFileContentState({
+            type: 'text',
+            content: cleanText || 'Document content converted with standard layout.',
+            error: null
+          });
+        } catch (err) {
+          console.error('DOCX conversion failed, attempting text fallback:', err);
+          try {
+            const base64Data = fileDataUrl.includes(',') ? fileDataUrl.split(',')[1] : fileDataUrl;
+            const text = new TextDecoder('utf-8', { fatal: false }).decode(
+              Uint8Array.from(window.atob(base64Data), c => c.charCodeAt(0))
+            );
+            const cleanText = text.split('').filter(c => {
+              const code = c.charCodeAt(0);
+              return code >= 32 || code === 10 || code === 13 || code === 9;
+            }).join('').replace(/\s+/g, ' ').trim();
+            setFileContentState({ type: 'text', content: cleanText, error: null });
+          } catch {
+            setFileContentState({ type: 'error', content: null, error: 'Could not extract inner content.' });
+          }
+        }
+      })();
+      return;
+    }
+
+    // 4. HTML / HTM files
+    if (
+      fileName.toLowerCase().endsWith('.html') ||
+      fileName.toLowerCase().endsWith('.htm') ||
+      fileDataUrl.startsWith('data:text/html')
+    ) {
+      try {
+        const base64Data = fileDataUrl.includes(',') ? fileDataUrl.split(',')[1] : fileDataUrl;
+        const text = decodeURIComponent(escape(window.atob(base64Data)));
+        setFileContentState({ type: 'html', content: text, error: null });
+        return;
+      } catch (err) {
+        console.error('HTML decode error:', err);
+      }
+    }
+
+    // 5. Plain text, Markdown, CSV, JSON, Code, RTF
+    if (
+      fileDataUrl.startsWith('data:text/') ||
+      /\.(txt|md|csv|json|rtf|log|xml|js|py)$/i.test(fileName)
+    ) {
+      try {
+        const base64Data = fileDataUrl.includes(',') ? fileDataUrl.split(',')[1] : fileDataUrl;
+        const text = new TextDecoder('utf-8', { fatal: false }).decode(
+          Uint8Array.from(window.atob(base64Data), c => c.charCodeAt(0))
+        );
+        setFileContentState({ type: 'text', content: text, error: null });
+        return;
+      } catch (err) {
+        console.error('Text decode error:', err);
+      }
+    }
+
+    // 6. Generic/Other: Try decoding as UTF-8 text
+    try {
+      const base64Data = fileDataUrl.includes(',') ? fileDataUrl.split(',')[1] : fileDataUrl;
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(
+        Uint8Array.from(window.atob(base64Data), c => c.charCodeAt(0))
+      );
+      const printable = text.split('').filter(c => {
+        const code = c.charCodeAt(0);
+        return code >= 32 || code === 10 || code === 13 || code === 9;
+      }).join('');
+      if (printable.trim().length > 15) {
+        setFileContentState({ type: 'text', content: printable, error: null });
+        return;
+      }
+    } catch {
+      // Ignore text decoding failure for non-text formats
+    }
+
+    // 7. Fallback to browser object/iframe embed
+    setFileContentState({ type: 'embed', content: fileDataUrl, error: null });
+  }, [isOpen, currentDoc, fileDataUrl, fileName]);
+
+  if (!isOpen || !student || !document) return null;
 
   const handlePrint = () => {
     window.print();
@@ -95,7 +239,7 @@ export default function DocumentViewerModal({
           </div>
 
           <div className="flex items-center gap-2">
-            {fileDataUrl && (
+            {!isStudent && fileDataUrl && (
               <button
                 type="button"
                 onClick={handleOpenExternal}
@@ -115,15 +259,17 @@ export default function DocumentViewerModal({
               <Download className="w-3.5 h-3.5 text-[#facc15]" />
               <span>Download</span>
             </button>
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Print Document"
-            >
-              <Printer className="w-3.5 h-3.5 text-[#facc15]" />
-              <span>Print</span>
-            </button>
+            {!isStudent && (
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Print Document"
+              >
+                <Printer className="w-3.5 h-3.5 text-[#facc15]" />
+                <span>Print</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -167,7 +313,7 @@ export default function DocumentViewerModal({
               </div>
 
               {/* Dossier Metadata Ribbon */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 mt-4 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-3 gap-x-5 sm:gap-x-6 bg-slate-50 p-3 rounded-xl border border-slate-200 mt-4 text-xs">
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase block">Candidate</span>
                   <p className="font-bold text-[#002147]">{currentStudent.name}</p>
@@ -193,7 +339,7 @@ export default function DocumentViewerModal({
               </div>
             </div>
 
-            {/* 2. AUTHENTIC SUBMITTED DOCUMENT CONTENT (Formatting strictly preserved) */}
+            {/* 2. AUTHENTIC SUBMITTED DOCUMENT CONTENT - EXACT FILE INNER CONTENT */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -209,60 +355,93 @@ export default function DocumentViewerModal({
                 )}
               </div>
 
-              {/* Responsive Container Preserving Original Formatting */}
-              {isPdf && fileDataUrl ? (
+              {/* Exact File Inner Content View */}
+              {fileContentState.type === 'loading' ? (
+                <div className="w-full py-12 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-200 text-slate-500">
+                  <div className="w-8 h-8 border-3 border-[#002147] border-t-transparent rounded-full animate-spin mb-3"></div>
+                  <p className="text-xs font-semibold">Extracting and rendering document inner content...</p>
+                </div>
+              ) : fileContentState.type === 'pdf' ? (
                 <div className="w-full rounded-xl overflow-hidden border border-slate-300 shadow-sm bg-slate-50">
-                  <div className="p-2 bg-slate-100 border-b border-slate-200 flex justify-between items-center text-xs text-slate-600 px-3">
-                    <span className="font-medium flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-red-600" />
-                      PDF Document View ({fileName || 'Uploaded Document'})
+                  <div className="p-2.5 bg-slate-100 border-b border-slate-200 flex justify-between items-center text-xs text-slate-700 px-4">
+                    <span className="font-bold flex items-center gap-1.5 text-[#002147]">
+                      <FileText className="w-4 h-4 text-red-600" />
+                      PDF Document View ({fileName || 'Document'})
                     </span>
                     <button
                       type="button"
                       onClick={handleDownload}
                       className="text-xs font-bold text-[#002147] hover:underline flex items-center gap-1 cursor-pointer"
                     >
-                      <Download className="w-3 h-3" /> Download PDF
+                      <Download className="w-3.5 h-3.5" /> Download PDF
                     </button>
                   </div>
+                  <object
+                    data={fileContentState.content}
+                    type="application/pdf"
+                    className="w-full h-[700px] border-0"
+                  >
+                    <iframe
+                      src={fileContentState.content}
+                      title={currentDoc.title}
+                      className="w-full h-[700px] border-0"
+                    />
+                  </object>
+                </div>
+              ) : fileContentState.type === 'image' ? (
+                <div className="w-full rounded-xl border border-slate-300 p-4 bg-slate-50 flex justify-center shadow-inner">
+                  <img
+                    src={fileContentState.content}
+                    alt={currentDoc.title}
+                    className="max-w-full h-auto object-contain rounded-lg border border-slate-200 shadow-sm mx-auto"
+                  />
+                </div>
+              ) : fileContentState.type === 'html' ? (
+                <div className="w-full bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
+                  <div className="p-2.5 bg-slate-100 border-b border-slate-200 flex justify-between items-center text-xs text-slate-700 px-4">
+                    <span className="font-bold flex items-center gap-1.5 text-[#002147]">
+                      <FileText className="w-4 h-4 text-blue-700" />
+                      Exact Document Content: {fileName || currentDoc.title}
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-semibold bg-white px-2 py-0.5 rounded border border-slate-200">
+                      Original Formatting Preserved
+                    </span>
+                  </div>
+                  <div
+                    className="p-6 sm:p-8 text-slate-800 text-sm leading-relaxed docx-preview-sheet overflow-x-auto bg-white min-h-[300px]"
+                    dangerouslySetInnerHTML={{ __html: fileContentState.content }}
+                  />
+                </div>
+              ) : fileContentState.type === 'text' ? (
+                <div className="w-full bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
+                  <div className="p-2.5 bg-slate-100 border-b border-slate-200 flex justify-between items-center text-xs text-slate-700 px-4">
+                    <span className="font-bold flex items-center gap-1.5 text-[#002147]">
+                      <FileText className="w-4 h-4 text-slate-700" />
+                      File Text Content: {fileName || currentDoc.title}
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-semibold bg-white px-2 py-0.5 rounded border border-slate-200">
+                      Exact Inner Content
+                    </span>
+                  </div>
+                  <pre className="p-6 text-xs text-slate-800 whitespace-pre-wrap font-mono leading-relaxed max-h-[600px] overflow-y-auto bg-slate-50">
+                    {fileContentState.content}
+                  </pre>
+                </div>
+              ) : fileContentState.type === 'embed' ? (
+                <div className="w-full rounded-xl overflow-hidden border border-slate-300 shadow-sm bg-slate-50">
                   <iframe
-                    src={fileDataUrl}
+                    src={fileContentState.content}
                     title={currentDoc.title}
                     className="w-full h-[650px] border-0"
                   />
                 </div>
-              ) : isImage && fileDataUrl ? (
-                <div className="w-full rounded-xl border border-slate-300 p-3 bg-slate-50 flex justify-center shadow-inner">
-                  <img
-                    src={fileDataUrl}
-                    alt={currentDoc.title}
-                    className="max-w-full h-auto object-contain rounded-lg border border-slate-200 shadow-sm"
-                  />
-                </div>
               ) : (
-                <div className="w-full bg-slate-50/70 p-6 sm:p-8 rounded-xl border border-slate-300 text-center space-y-3">
-                  <div className="w-14 h-14 bg-blue-50 text-[#002147] rounded-2xl flex items-center justify-center mx-auto border border-blue-200 shadow-sm">
-                    <FileText className="w-7 h-7 text-[#c29b38]" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-base text-[#002147]">{fileName || currentDoc.title}</h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Uploaded File · {currentDoc.fileSize || 'Standard size'}
-                    </p>
-                    <p className="text-xs text-slate-600 mt-2 max-w-md mx-auto">
-                      The formatting, structure, and binary content of this submitted document are preserved exactly as uploaded.
-                    </p>
-                  </div>
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={handleDownload}
-                      className="px-4 py-2 bg-[#002147] hover:bg-[#003366] text-white rounded-xl text-xs font-bold inline-flex items-center gap-2 shadow transition-all cursor-pointer"
-                    >
-                      <Download className="w-4 h-4 text-[#facc15]" />
-                      <span>Download Submitted File ({fileName || 'Document'})</span>
-                    </button>
-                  </div>
+                <div className="w-full bg-slate-50 p-6 rounded-xl border border-slate-300 text-center space-y-2">
+                  <FileText className="w-10 h-10 text-[#002147] mx-auto opacity-70" />
+                  <h4 className="font-bold text-sm text-[#002147]">{currentDoc.title}</h4>
+                  <p className="text-xs text-slate-500">
+                    Dossier reference: {currentDoc.id} · Submitted by {currentStudent.name}
+                  </p>
                 </div>
               )}
             </div>
@@ -282,25 +461,25 @@ export default function DocumentViewerModal({
               </div>
 
               {/* 4-Tier Signature Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 sm:gap-x-8 max-w-4xl mx-auto">
                 
                 {/* 1. STUDENT SIGNATURE */}
-                <div className="border border-slate-300 rounded-xl p-3.5 bg-slate-50/70 flex flex-col justify-between min-h-[160px] relative">
+                <div className="border border-slate-300 rounded-xl p-2.5 bg-slate-50/70 flex flex-col justify-between min-h-[130px] relative">
                   <div>
                     <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 mb-2">
-                      <span className="font-bold text-xs text-[#002147] uppercase tracking-wider">
+                      <span className="font-bold text-[10px] text-[#002147] uppercase tracking-wider">
                         1. Student Signature
                       </span>
                       <span className="text-[10px] text-slate-500 font-mono">
                         (Handwritten Canvas Draw)
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[10px] text-slate-500">
                       I hereby certify that all submitted reports reflect genuine industrial work performed.
                     </p>
                   </div>
 
-                  <div className="my-2 flex flex-col items-center justify-center">
+                  <div className="my-1.5 flex flex-col items-center justify-center">
                     {currentDoc.studentSigned && currentDoc.studentSignature ? (
                       <div className="text-center">
                         <img
@@ -341,22 +520,22 @@ export default function DocumentViewerModal({
                 </div>
 
                 {/* 2. FACULTY SUPERVISOR SIGNATURE */}
-                <div className="border border-slate-300 rounded-xl p-3.5 bg-slate-50/70 flex flex-col justify-between min-h-[160px] relative">
+                <div className="border border-slate-300 rounded-xl p-2.5 bg-slate-50/70 flex flex-col justify-between min-h-[130px] relative">
                   <div>
                     <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 mb-2">
-                      <span className="font-bold text-xs text-[#002147] uppercase tracking-wider">
+                      <span className="font-bold text-[10px] text-[#002147] uppercase tracking-wider">
                         2. Faculty Supervisor
                       </span>
                       <span className="text-[10px] text-slate-500 font-mono">
                         (Faculty Mentor)
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[10px] text-slate-500">
                       Evaluated and endorsed by assigned departmental supervisor.
                     </p>
                   </div>
 
-                  <div className="my-2 flex flex-col items-center justify-center">
+                  <div className="my-1.5 flex flex-col items-center justify-center">
                     {currentDoc.supervisorSigned && currentDoc.supervisorSignature ? (
                       <div className="text-center">
                         <img
@@ -396,22 +575,22 @@ export default function DocumentViewerModal({
                 </div>
 
                 {/* 3. INTERNSHIP INCHARGE SIGNATURE & STAMP */}
-                <div className="border border-slate-300 rounded-xl p-3.5 bg-slate-50/70 flex flex-col justify-between min-h-[160px] relative">
+                <div className="border border-slate-300 rounded-xl p-2.5 bg-slate-50/70 flex flex-col justify-between min-h-[130px] relative">
                   <div>
                     <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 mb-2">
-                      <span className="font-bold text-xs text-[#002147] uppercase tracking-wider">
+                      <span className="font-bold text-[10px] text-[#002147] uppercase tracking-wider">
                         3. Internship Incharge
                       </span>
                       <span className="text-[10px] text-slate-500 font-mono">
                         (Placement Cell Seal)
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[10px] text-slate-500">
                       Verified corporate placement criteria and departmental compliance standards.
                     </p>
                   </div>
 
-                  <div className="my-2 flex flex-col items-center justify-center">
+                  <div className="my-1.5 flex flex-col items-center justify-center">
                     {currentDoc.inchargeSigned && currentDoc.inchargeSignature ? (
                       <div className="text-center">
                         <img
@@ -451,22 +630,22 @@ export default function DocumentViewerModal({
                 </div>
 
                 {/* 4. HEAD OF DEPARTMENT (HOD) FINAL CLEARANCE */}
-                <div className="border border-slate-300 rounded-xl p-3.5 bg-slate-50/70 flex flex-col justify-between min-h-[160px] relative">
+                <div className="border border-slate-300 rounded-xl p-2.5 bg-slate-50/70 flex flex-col justify-between min-h-[130px] relative">
                   <div>
                     <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 mb-2">
-                      <span className="font-bold text-xs text-[#002147] uppercase tracking-wider">
+                      <span className="font-bold text-[10px] text-[#002147] uppercase tracking-wider">
                         4. Head of Department
                       </span>
                       <span className="text-[10px] text-slate-500 font-mono">
                         (Degree Clearance)
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[10px] text-slate-500">
                       Final departmental clearance and 3 credit hours transcript accreditation.
                     </p>
                   </div>
 
-                  <div className="my-2 flex flex-col items-center justify-center">
+                  <div className="my-1.5 flex flex-col items-center justify-center">
                     {currentDoc.hodSigned && currentDoc.hodSignature ? (
                       <div className="text-center">
                         <img

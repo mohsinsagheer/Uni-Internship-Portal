@@ -175,3 +175,70 @@ a {
     animation: none !important;
   }
 }
+
+/* Authentic Document / DOCX Inner Content Sheet Styling */
+.docx-preview-sheet {
+  font-family: Calibri, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  color: #1e293b;
+  line-height: 1.65;
+  font-size: 0.925rem;
+}
+.docx-preview-sheet h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #002147;
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 0.35rem;
+}
+.docx-preview-sheet h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #002147;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+.docx-preview-sheet h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-top: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+.docx-preview-sheet p {
+  margin-bottom: 0.75rem;
+}
+.docx-preview-sheet table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+}
+.docx-preview-sheet th,
+.docx-preview-sheet td {
+  border: 1px solid #cbd5e1;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.docx-preview-sheet th {
+  background-color: #f8fafc;
+  font-weight: 700;
+  color: #002147;
+}
+.docx-preview-sheet ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+.docx-preview-sheet ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+.docx-preview-sheet strong,
+.docx-preview-sheet b {
+  font-weight: 700;
+  color: #0f172a;
+}
+
