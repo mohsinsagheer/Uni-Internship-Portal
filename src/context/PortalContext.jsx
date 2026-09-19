@@ -11,6 +11,13 @@ import {
 
 const PortalContext = createContext();
 
+// ── Module-level helpers ──
+export const isOfficialUniversityEmail = (email) => {
+  if (!email || typeof email !== 'string') return false;
+  const lower = email.trim().toLowerCase();
+  return lower.endsWith('@isbstudents.comsats.edu.pk') || lower.endsWith('@isbfaculty.comsats.edu.pk');
+};
+
 const STORAGE_KEYS = {
   CURRENT_USER: 'cui_portal_user',
   STUDENTS: 'cui_portal_students',
@@ -204,13 +211,21 @@ export const PortalProvider = ({ children }) => {
   };
 
   // Login handler
-  const login = (regNo, password, role) => {
+  const login = (identifier, password, role) => {
     if (!password || !password.trim()) {
       return { success: false, error: 'Please enter your password.' };
     }
+    if (!identifier || !identifier.trim()) {
+      return { success: false, error: role === 'student' ? 'Please enter your Registration Number.' : 'Please enter your Account Email.' };
+    }
+
+    const cleanId = identifier.trim().toLowerCase();
 
     if (role === 'student') {
-      const match = students.find(s => s.regNo.toLowerCase() === regNo.toLowerCase());
+      const match = students.find(s =>
+        s.regNo.toLowerCase() === cleanId ||
+        (s.email && s.email.toLowerCase() === cleanId)
+      );
       if (match) {
         if (match.password && match.password !== password) {
           return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
@@ -219,9 +234,12 @@ export const PortalProvider = ({ children }) => {
         showToast(`Welcome back, ${match.name}! Logged in successfully.`);
         return { success: true };
       }
-      return { success: false, error: 'No student found with registration number: ' + regNo };
+      return { success: false, error: 'No student found with registration number or email: ' + identifier };
     } else if (role === 'supervisor') {
-      const match = supervisors.find(s => s.regNo.toLowerCase() === regNo.toLowerCase());
+      const match = supervisors.find(s =>
+        s.regNo.toLowerCase() === cleanId ||
+        (s.email && s.email.toLowerCase() === cleanId)
+      );
       if (match) {
         if (match.password && match.password !== password) {
           return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
@@ -230,8 +248,12 @@ export const PortalProvider = ({ children }) => {
         showToast(`Welcome Dr./Engr. ${match.name}! Logged in as Faculty Supervisor.`);
         return { success: true };
       }
-      return { success: false, error: 'No supervisor found with Employee ID: ' + regNo };
+      return { success: false, error: 'No supervisor found with account email or ID: ' + identifier };
     } else if (role === 'incharge') {
+      const isMatch = inchargeUser.regNo.toLowerCase() === cleanId || (inchargeUser.email && inchargeUser.email.toLowerCase() === cleanId);
+      if (!isMatch) {
+        return { success: false, error: 'No Incharge account found matching: ' + identifier };
+      }
       if (inchargeUser.password && inchargeUser.password !== password) {
         return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
       }
@@ -239,6 +261,10 @@ export const PortalProvider = ({ children }) => {
       showToast(`Welcome Dr. Usama Nadeem! Logged in as Internship Incharge.`);
       return { success: true };
     } else if (role === 'hod') {
+      const isMatch = hodUser.regNo.toLowerCase() === cleanId || (hodUser.email && hodUser.email.toLowerCase() === cleanId);
+      if (!isMatch) {
+        return { success: false, error: 'No HOD account found matching: ' + identifier };
+      }
       if (hodUser.password && hodUser.password !== password) {
         return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
       }
@@ -251,13 +277,22 @@ export const PortalProvider = ({ children }) => {
 
   // Register / Sign up new user
   const signup = (userData) => {
-    const cleanRegNo = userData.regNo.trim().toUpperCase();
-    const campusCode = selectedCampus || 'isb';
-    
-    // Dynamically assign official university email based on registration number / role
-    const officialEmail = userData.role === 'student'
-      ? `${cleanRegNo.toLowerCase()}@${campusCode}.comsats.edu.pk`
-      : `${cleanRegNo.toLowerCase()}@comsats.edu.pk`;
+    const rawInput = userData.regNo.trim();
+    const isStudent = userData.role === 'student';
+
+    let cleanRegNo = rawInput.toUpperCase();
+    let officialEmail = '';
+
+    if (isStudent) {
+      officialEmail = `${rawInput.toLowerCase()}@isbstudents.comsats.edu.pk`;
+    } else {
+      if (rawInput.includes('@')) {
+        officialEmail = rawInput.toLowerCase();
+        cleanRegNo = rawInput.split('@')[0].toUpperCase();
+      } else {
+        officialEmail = `${rawInput.toLowerCase()}@isbfaculty.comsats.edu.pk`;
+      }
+    }
 
     if (userData.role === 'student') {
       const newStudent = {
@@ -286,7 +321,7 @@ export const PortalProvider = ({ children }) => {
       setStudents(prev => [newStudent, ...prev]);
       setCurrentUser({ ...newStudent, role: 'student' });
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify({ ...newStudent, role: 'student' }));
-      showToast(`Account created for ${newStudent.name}! Official email: ${officialEmail}`);
+      showToast(`Account created for ${newStudent.name}! Welcome to CUOnline.`);
       return { success: true };
     } else if (userData.role === 'supervisor') {
       const newSupervisor = {
@@ -306,7 +341,7 @@ export const PortalProvider = ({ children }) => {
       setSupervisors(prev => [...prev, newSupervisor]);
       setCurrentUser({ ...newSupervisor, role: 'supervisor' });
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify({ ...newSupervisor, role: 'supervisor' }));
-      showToast(`Faculty account registered for ${newSupervisor.name}. Official email: ${officialEmail}`);
+      showToast(`Faculty account registered for ${newSupervisor.name}.`);
       return { success: true };
     } else {
       const newUser = {
@@ -325,27 +360,28 @@ export const PortalProvider = ({ children }) => {
       };
       setCurrentUser(newUser);
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(newUser));
-      showToast(`Account registered for ${newUser.name}. Official email: ${officialEmail}`);
+      showToast(`Account registered for ${newUser.name}.`);
       return { success: true };
     }
   };
 
-  // Find user by official email
+  // Find user by account email
   const findUserByEmail = (email) => {
     if (!email) return null;
     const clean = email.trim().toLowerCase();
-    
+
     // Check students
-    const std = students.find(s => 
+    const std = students.find(s =>
       (s.email && s.email.toLowerCase() === clean) ||
-      (s.regNo && `${s.regNo.toLowerCase()}@${selectedCampus || 'isb'}.comsats.edu.pk` === clean) ||
+      (s.regNo && `${s.regNo.toLowerCase()}@isbstudents.comsats.edu.pk` === clean) ||
       (s.regNo && `${s.regNo.toLowerCase()}@isb.comsats.edu.pk` === clean)
     );
     if (std) return { user: std, role: 'student' };
 
     // Check supervisors
-    const sup = supervisors.find(s => 
+    const sup = supervisors.find(s =>
       (s.email && s.email.toLowerCase() === clean) ||
+      (s.regNo && `${s.regNo.toLowerCase()}@isbfaculty.comsats.edu.pk` === clean) ||
       (s.regNo && `${s.regNo.toLowerCase()}@comsats.edu.pk` === clean)
     );
     if (sup) return { user: sup, role: 'supervisor' };
@@ -366,29 +402,29 @@ export const PortalProvider = ({ children }) => {
   // Request password reset link by account email
   const requestPasswordReset = (email) => {
     if (!email || !email.trim()) {
-      return { success: false, error: 'Please enter your account official email.' };
+      return { success: false, error: 'Please enter your account email.' };
     }
 
     const match = findUserByEmail(email);
     if (!match) {
       return {
         success: false,
-        error: `No registered account found matching "${email}". Please ensure you entered your official COMSATS email.`
+        error: `No registered account found matching "${email}". Please verify your account email.`
       };
     }
 
     const resetToken = `rst-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
-    const officialAccountEmail = match.user.email || email.trim().toLowerCase();
-    const resetLink = `https://cuonline.comsats.edu.pk/auth/reset-password?token=${resetToken}&email=${encodeURIComponent(officialAccountEmail)}`;
+    const accountEmail = match.user.email || email.trim().toLowerCase();
+    const resetLink = `https://cuonline.comsats.edu.pk/auth/reset-password?token=${resetToken}&email=${encodeURIComponent(accountEmail)}`;
 
     return {
       success: true,
       user: match.user,
       role: match.role,
-      email: officialAccountEmail,
+      email: accountEmail,
       resetToken,
       resetLink,
-      message: `Reset link generated for ${match.user.name} (${officialAccountEmail}).`
+      message: `Reset link generated for ${match.user.name} (${accountEmail}).`
     };
   };
 

@@ -146,7 +146,7 @@ export default function AuthModal({ isOpen, onClose }) {
     setInfoMessage('');
 
     if (!forgotEmail.trim()) {
-      setError('Please enter your official account email.');
+      setError('Please enter your account email.');
       return;
     }
 
@@ -235,27 +235,25 @@ export default function AuthModal({ isOpen, onClose }) {
           <div className="p-1.5 bg-slate-100/90 rounded-2xl flex gap-1.5 border border-slate-200 shadow-inner">
             <button
               onClick={() => switchTab('login')}
-              className={`flex-1 py-3 text-center text-sm sm:text-base font-bold rounded-xl transition-all ${
-                activeTab === 'login'
-                  ? 'bg-[#002147] text-white shadow-[0_6px_16px_rgba(0,33,71,0.18)]'
-                  : 'text-slate-600 hover:text-[#002147]'
-              }`}
+              className={`flex-1 py-3 text-center text-sm sm:text-base font-bold rounded-xl transition-all ${activeTab === 'login'
+                ? 'bg-[#002147] text-white shadow-[0_6px_16px_rgba(0,33,71,0.18)]'
+                : 'text-slate-600 hover:text-[#002147]'
+                }`}
             >
               Sign In
             </button>
             <button
               onClick={() => switchTab('signup')}
-              className={`flex-1 py-3 text-center text-sm sm:text-base font-bold rounded-xl transition-all ${
-                activeTab === 'signup'
-                  ? 'bg-[#002147] text-white shadow-[0_6px_16px_rgba(0,33,71,0.18)]'
-                  : 'text-slate-600 hover:text-[#002147]'
-              }`}
+              className={`flex-1 py-3 text-center text-sm sm:text-base font-bold rounded-xl transition-all ${activeTab === 'signup'
+                ? 'bg-[#002147] text-white shadow-[0_6px_16px_rgba(0,33,71,0.18)]'
+                : 'text-slate-600 hover:text-[#002147]'
+                }`}
             >
               Create Account
             </button>
             {(activeTab === 'forgot' || activeTab === 'reset') && (
               <button
-                onClick={() => {}}
+                onClick={() => { }}
                 className="flex-1 py-3 text-center text-sm sm:text-base font-bold rounded-xl bg-[#c29b38] text-[#001530] shadow-md transition-all"
               >
                 Reset Password
@@ -294,11 +292,10 @@ export default function AuthModal({ isOpen, onClose }) {
                       key={r.id}
                       type="button"
                       onClick={() => setRole(r.id)}
-                      className={`py-2 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 transition-all text-[11px] sm:text-xs font-bold ${
-                        isSelected
-                          ? 'bg-[#002147] text-white border-[#c29b38] shadow-md ring-2 ring-[#c29b38]/40'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
+                      className={`py-2 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 transition-all text-[11px] sm:text-xs font-bold ${isSelected
+                        ? 'bg-[#002147] text-white border-[#c29b38] shadow-md ring-2 ring-[#c29b38]/40'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
                     >
                       <IconComponent className={`w-3.5 h-3.5 ${isSelected ? 'text-[#facc15]' : 'text-slate-500'}`} />
                       <span>{r.label}</span>
@@ -334,7 +331,7 @@ export default function AuthModal({ isOpen, onClose }) {
             <form onSubmit={handleLoginSubmit} className="space-y-4 pt-1 animate-fade-in">
               <div>
                 <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  {role === 'student' ? 'Student Registration Number:' : 'Employee / Faculty ID:'}
+                  {role === 'student' ? 'Student Registration Number:' : 'Account Email:'}
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -345,13 +342,9 @@ export default function AuthModal({ isOpen, onClose }) {
                     placeholder={
                       role === 'student'
                         ? 'e.g. FA21-BCS-045'
-                        : role === 'supervisor'
-                        ? 'e.g. EMP-CS-108'
-                        : role === 'incharge'
-                        ? 'e.g. INC-CS-002'
-                        : 'e.g. HOD-CS-001'
+                        : 'e.g. faculty@isbfaculty.comsats.edu.pk'
                     }
-                    className="w-full pl-10 pr-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002147] uppercase font-mono font-bold text-slate-800 shadow-sm"
+                    className="w-full pl-10 pr-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002147] font-mono font-bold text-slate-800 shadow-sm"
                   />
                 </div>
               </div>
@@ -403,13 +396,10 @@ export default function AuthModal({ isOpen, onClose }) {
           {/* ═════════ TAB 2: CREATE ACCOUNT (Official Email Removed, Password Added) ═════════ */}
           {activeTab === 'signup' && (
             <form onSubmit={handleSignupSubmit} className="space-y-4 pt-1 animate-fade-in">
-              <div className="mb-1 flex items-center justify-between">
+              <div className="mb-1">
                 <p className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.18em] text-[#002147]">
                   {role === 'student' ? 'Student Registration' : 'Account Registration'}
                 </p>
-                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                  Official Email Auto-Generated
-                </span>
               </div>
 
               <div>
@@ -430,23 +420,15 @@ export default function AuthModal({ isOpen, onClose }) {
 
               <div>
                 <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  {role === 'student' ? 'Registration Number:' : 'Official Employee / Staff ID:'}
+                  {role === 'student' ? 'Registration Number:' : 'Account Email:'}
                 </label>
                 <input
                   type="text"
                   value={regNo}
                   onChange={(e) => setRegNo(e.target.value)}
-                  placeholder={role === 'student' ? 'e.g. FA22-BCS-099' : 'e.g. EMP-CS-401'}
-                  className="w-full px-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl uppercase font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#002147] shadow-sm"
+                  placeholder={role === 'student' ? 'e.g. FA22-BCS-099' : 'e.g. faculty@isbfaculty.comsats.edu.pk'}
+                  className="w-full px-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#002147] shadow-sm"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Official email will be automatically assigned as:{' '}
-                  <span className="font-mono font-semibold text-[#002147]">
-                    {regNo.trim()
-                      ? `${regNo.trim().toLowerCase()}@${role === 'student' ? (selectedCampus || 'isb') + '.' : ''}comsats.edu.pk`
-                      : '<your-id>@isb.comsats.edu.pk'}
-                  </span>
-                </p>
               </div>
 
               {/* Password Fields (Mandatory for account creation) */}
@@ -574,7 +556,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     Reset Account Password
                   </h4>
                   <p className="text-xs text-slate-500">
-                    Provide your official account email to receive a secure link to set a new password.
+                    Provide your account email to receive a secure link to set a new password.
                   </p>
                 </div>
               </div>
@@ -583,7 +565,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <form onSubmit={handleRequestResetSubmit} className="space-y-4">
                   <div>
                     <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Account Official Email Address:
+                      Account Email:
                     </label>
                     <div className="relative">
                       <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -591,13 +573,10 @@ export default function AuthModal({ isOpen, onClose }) {
                         type="email"
                         value={forgotEmail}
                         onChange={(e) => setForgotEmail(e.target.value)}
-                        placeholder="e.g. fa21-bcs-045@isb.comsats.edu.pk"
+                        placeholder="Portal Account Email"
                         className="w-full pl-10 pr-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002147] text-slate-800 shadow-sm font-medium"
                       />
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1.5">
-                      Tip: Enter your student or employee official university email address.
-                    </p>
                   </div>
 
                   <button
@@ -625,7 +604,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs font-mono text-slate-700 break-all select-all flex items-center justify-between gap-2">
                       <span className="truncate">{forgotData.resetLink}</span>
                       <span className="shrink-0 text-[10px] font-bold text-[#002147] bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
-                        OFFICIAL LINK
+                        RESET LINK
                       </span>
                     </div>
                   </div>

@@ -23,7 +23,7 @@ import {
   Download,
   BookOpen,
 } from 'lucide-react';
-import { usePortal, downloadTemplateFile } from '../../context/PortalContext';
+import { usePortal, downloadTemplateFile, isOfficialUniversityEmail } from '../../context/PortalContext';
 import StudentFilterBar from '../common/StudentFilterBar';
 
 export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTab, onOpenSignatureModal, onOpenDocumentViewer }) {
@@ -86,6 +86,10 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
   }, [currentUser]);
 
   const handleSaveProfile = () => {
+    if (profileDraft.email && !isOfficialUniversityEmail(profileDraft.email)) {
+      showToast('Official email must end with @isbfaculty.comsats.edu.pk or @isbstudents.comsats.edu.pk', 'error');
+      return;
+    }
     updateUserProfile({
       name: profileDraft.name || null,
       designation: profileDraft.designation || null,
@@ -362,7 +366,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
                         { key: 'name', label: 'Full Name', placeholder: 'Dr. / Mr. Full Name' },
                         { key: 'designation', label: 'Designation', placeholder: 'Internship Incharge' },
                         { key: 'department', label: 'Department', placeholder: 'Computer Science' },
-                        { key: 'email', label: 'Email', placeholder: 'incharge@comsats.edu.pk' },
+                        { key: 'email', label: 'Official University Email', placeholder: 'e.g. name@isbfaculty.comsats.edu.pk' },
                         { key: 'phone', label: 'Phone / Ext.', placeholder: 'e.g. 051-90495049' },
                       ].map(({ key, label, placeholder }) => (
                         <div key={key}>

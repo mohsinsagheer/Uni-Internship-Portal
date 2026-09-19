@@ -18,7 +18,7 @@ import {
   LayoutDashboard,
   BookOpen,
 } from 'lucide-react';
-import { usePortal } from '../../context/PortalContext';
+import { usePortal, isOfficialUniversityEmail } from '../../context/PortalContext';
 import StudentFilterBar from '../common/StudentFilterBar';
 import confetti from 'canvas-confetti';
 
@@ -77,6 +77,10 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
   }, [currentUser]);
 
   const handleSaveProfile = () => {
+    if (profileDraft.email && !isOfficialUniversityEmail(profileDraft.email)) {
+      showToast('Official email must end with @isbfaculty.comsats.edu.pk or @isbstudents.comsats.edu.pk', 'error');
+      return;
+    }
     updateUserProfile({
       name: profileDraft.name || null,
       designation: profileDraft.designation || null,
@@ -245,7 +249,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                         { key: 'name',        label: 'Full Name',     placeholder: 'Dr. Full Name' },
                         { key: 'designation', label: 'Designation',   placeholder: 'Head of Department' },
                         { key: 'department',  label: 'Department',    placeholder: 'Computer Science' },
-                        { key: 'email',       label: 'Email',         placeholder: 'hod@comsats.edu.pk' },
+                        { key: 'email',       label: 'Official University Email', placeholder: 'e.g. name@isbfaculty.comsats.edu.pk' },
                         { key: 'phone',       label: 'Phone / Ext.',  placeholder: 'e.g. 051-90495049' },
                       ].map(({ key, label, placeholder }) => (
                         <div key={key}>

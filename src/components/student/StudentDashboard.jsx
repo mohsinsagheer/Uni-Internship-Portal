@@ -30,7 +30,7 @@ import {
   BookOpen,
   Camera,
 } from 'lucide-react';
-import { usePortal, downloadTemplateFile } from '../../context/PortalContext';
+import { usePortal, downloadTemplateFile, isOfficialUniversityEmail } from '../../context/PortalContext';
 
 export default function StudentDashboard({
   activeTab = 'dashboard',
@@ -46,6 +46,7 @@ export default function StudentDashboard({
     deleteStudentDocument,
     updateUserAvatar,
     updateUserProfile,
+    showToast,
   } = usePortal();
 
   const avatarInputRef = useRef(null);
@@ -157,6 +158,28 @@ export default function StudentDashboard({
       creditHoursCompleted: currentUser?.creditHoursCompleted || '',
     });
     setEditingPlacement(false);
+  };
+
+  // Official university email edit state
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState(currentUser?.email || '');
+
+  useEffect(() => {
+    setEmailDraft(currentUser?.email || '');
+  }, [currentUser?.email]);
+
+  const handleSaveEmail = () => {
+    const trimmed = emailDraft.trim();
+    if (trimmed && !isOfficialUniversityEmail(trimmed)) {
+      showToast('Official university email must end with @isbstudents.comsats.edu.pk or @isbfaculty.comsats.edu.pk', 'error');
+      return;
+    }
+    updateUserProfile({ email: trimmed || null });
+    setEditingEmail(false);
+  };
+  const handleCancelEmail = () => {
+    setEmailDraft(currentUser?.email || '');
+    setEditingEmail(false);
   };
 
   // Status computation
@@ -312,13 +335,78 @@ export default function StudentDashboard({
                       <Building2 className="w-3.5 h-3.5 text-slate-400" />
                       <span>{currentUser?.department || 'NULL'}</span>
                     </p>
-                    <div className="text-xs text-slate-700 flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 inline-flex mt-1">
-                      <Mail className="w-3.5 h-3.5 text-[#c29b38]" />
-                      <span className="font-bold text-slate-500">Official Email:</span>
-                      <span className="font-mono font-bold text-[#002147]">
-                        {currentUser?.email || (currentUser?.regNo ? `${currentUser.regNo.toLowerCase()}@isb.comsats.edu.pk` : 'NULL')}
-                      </span>
-                    </div>
+                    {/* Official University Email – editable */}
+                    {editingEmail ? (
+                      <div className="mt-2 p-2.5 bg-slate-50 rounded-xl border border-[#c29b38]/40 shadow-sm max-w-md space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-black uppercase tracking-wider text-[#002147] flex items-center gap-1">
+                            <Mail className="w-3 h-3 text-[#c29b38]" />
+                            <span>Edit Official University Email</span>
+                          </label>
+                          <span className="text-[10px] text-slate-400 font-mono">Endorsement Requirement</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="email"
+                            value={emailDraft}
+                            onChange={(e) => setEmailDraft(e.target.value)}
+                            placeholder="e.g. FA21-BCS-045@isbstudents.comsats.edu.pk"
+                            className="flex-1 px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-[#002147] bg-white text-slate-800"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSaveEmail();
+                              } else if (e.key === 'Escape') {
+                                handleCancelEmail();
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSaveEmail}
+                            className="px-2.5 py-1.5 bg-[#002147] hover:bg-[#001736] text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1 shadow-sm shrink-0"
+                            title="Save Official Email"
+                          >
+                            <Save className="w-3.5 h-3.5 text-[#facc15]" />
+                            <span>Save</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEmail}
+                            className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors shrink-0"
+                            title="Cancel"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-tight">
+                          Must end with <span className="font-mono font-bold text-[#002147]">@isbstudents.comsats.edu.pk</span> or <span className="font-mono font-bold text-[#002147]">@isbfaculty.comsats.edu.pk</span>
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <div className="text-xs text-slate-700 flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 inline-flex">
+                          <Mail className="w-3.5 h-3.5 text-[#c29b38]" />
+                          <span className="font-bold text-slate-500">Official Email:</span>
+                          <span className="font-mono font-bold text-[#002147]">
+                            {currentUser?.email || 'NULL'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEmailDraft(currentUser?.email || '');
+                            setEditingEmail(true);
+                          }}
+                          className="px-2 py-1 text-slate-600 hover:text-[#002147] hover:bg-slate-100 rounded-lg transition-all inline-flex items-center gap-1 text-[11px] font-bold border border-slate-200/80 shadow-xs"
+                          title="Edit Official University Email"
+                        >
+                          <Edit3 className="w-3 h-3 text-[#c29b38]" />
+                          <span>Edit</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 

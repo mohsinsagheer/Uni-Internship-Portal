@@ -21,7 +21,7 @@ import {
   Download,
   BookOpen,
 } from 'lucide-react';
-import { usePortal, downloadTemplateFile } from '../../context/PortalContext';
+import { usePortal, downloadTemplateFile, isOfficialUniversityEmail } from '../../context/PortalContext';
 import StudentFilterBar from '../common/StudentFilterBar';
 
 export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab, onOpenSignatureModal, onOpenDocumentViewer }) {
@@ -84,6 +84,10 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
   }, [currentUser]);
 
   const handleSaveProfile = () => {
+    if (profileDraft.email && !isOfficialUniversityEmail(profileDraft.email)) {
+      showToast('Official email must end with @isbfaculty.comsats.edu.pk or @isbstudents.comsats.edu.pk', 'error');
+      return;
+    }
     updateUserProfile({
       name: profileDraft.name || null,
       designation: profileDraft.designation || null,
@@ -206,7 +210,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
                     { key: 'name', label: 'Full Name', placeholder: 'Dr. / Mr. Full Name' },
                     { key: 'designation', label: 'Designation', placeholder: 'Lecturer / Assistant Professor' },
                     { key: 'department', label: 'Department', placeholder: 'Computer Science' },
-                    { key: 'email', label: 'Email', placeholder: 'faculty@comsats.edu.pk' },
+                    { key: 'email', label: 'Official University Email', placeholder: 'e.g. name@isbfaculty.comsats.edu.pk' },
                     { key: 'phone', label: 'Phone / Ext.', placeholder: 'e.g. 051-90495049' },
                   ].map(({ key, label, placeholder }) => (
                     <div key={key}>
@@ -252,7 +256,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
                     style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.92)', border: '1px solid rgba(255,255,255,0.20)', backdropFilter: 'blur(6px)' }}>
                     <Mail className="w-4 h-4 text-sky-300 shrink-0" />
                     <span className="font-bold text-sky-200">Official Email:</span>
-                    <span className="font-mono font-bold">{savedProfile.email || currentUser?.email || (currentUser?.regNo ? `${currentUser.regNo.toLowerCase()}@comsats.edu.pk` : 'NULL')}</span>
+                    <span className="font-mono font-bold">{savedProfile.email || currentUser?.email || 'NULL'}</span>
                   </span>
                   {savedProfile.phone ? (
                     <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
