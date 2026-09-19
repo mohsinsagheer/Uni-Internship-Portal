@@ -205,9 +205,16 @@ export const PortalProvider = ({ children }) => {
 
   // Login handler
   const login = (regNo, password, role) => {
+    if (!password || !password.trim()) {
+      return { success: false, error: 'Please enter your password.' };
+    }
+
     if (role === 'student') {
       const match = students.find(s => s.regNo.toLowerCase() === regNo.toLowerCase());
       if (match) {
+        if (match.password && match.password !== password) {
+          return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
+        }
         setCurrentUser({ ...match, role: 'student' });
         showToast(`Welcome back, ${match.name}! Logged in successfully.`);
         return { success: true };
@@ -216,16 +223,25 @@ export const PortalProvider = ({ children }) => {
     } else if (role === 'supervisor') {
       const match = supervisors.find(s => s.regNo.toLowerCase() === regNo.toLowerCase());
       if (match) {
+        if (match.password && match.password !== password) {
+          return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
+        }
         setCurrentUser({ ...match, role: 'supervisor' });
         showToast(`Welcome Dr./Engr. ${match.name}! Logged in as Faculty Supervisor.`);
         return { success: true };
       }
       return { success: false, error: 'No supervisor found with Employee ID: ' + regNo };
     } else if (role === 'incharge') {
+      if (inchargeUser.password && inchargeUser.password !== password) {
+        return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
+      }
       setCurrentUser({ ...inchargeUser, role: 'incharge' });
       showToast(`Welcome Dr. Usama Nadeem! Logged in as Internship Incharge.`);
       return { success: true };
     } else if (role === 'hod') {
+      if (hodUser.password && hodUser.password !== password) {
+        return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
+      }
       setCurrentUser({ ...hodUser, role: 'hod' });
       showToast(`Welcome Prof. Dr. Majid Iqbal! Logged in as Head of Department.`);
       return { success: true };
@@ -235,17 +251,28 @@ export const PortalProvider = ({ children }) => {
 
   // Register / Sign up new user
   const signup = (userData) => {
+    const cleanRegNo = userData.regNo.trim().toUpperCase();
+    const campusCode = selectedCampus || 'isb';
+    
+    // Dynamically assign official university email based on registration number / role
+    const officialEmail = userData.role === 'student'
+      ? `${cleanRegNo.toLowerCase()}@${campusCode}.comsats.edu.pk`
+      : `${cleanRegNo.toLowerCase()}@comsats.edu.pk`;
+
     if (userData.role === 'student') {
       const newStudent = {
         id: `std-${Date.now()}`,
-        regNo: userData.regNo.toUpperCase(),
-        name: userData.name,
-        email: userData.email,
+        regNo: cleanRegNo,
+        name: userData.name.trim(),
+        email: officialEmail,
+        password: userData.password,
         program: userData.program || null,
-        semester: userData.semester || '7th Semester',
+        semester: userData.semester || null,
         cgpa: null,
         creditHoursCompleted: null,
         phone: null,
+        department: null,
+        office: null,
         assignedSupervisorId: null,
         internshipCompany: userData.internshipCompany || null,
         internshipRole: userData.internshipRole || null,
@@ -259,14 +286,15 @@ export const PortalProvider = ({ children }) => {
       setStudents(prev => [newStudent, ...prev]);
       setCurrentUser({ ...newStudent, role: 'student' });
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify({ ...newStudent, role: 'student' }));
-      showToast(`Account created for ${newStudent.name}! Please complete your profile details.`);
+      showToast(`Account created for ${newStudent.name}! Official email: ${officialEmail}`);
       return { success: true };
     } else if (userData.role === 'supervisor') {
       const newSupervisor = {
         id: `sup-${Date.now()}`,
-        regNo: userData.regNo.toUpperCase(),
-        name: userData.name,
-        email: userData.email,
+        regNo: cleanRegNo,
+        name: userData.name.trim(),
+        email: officialEmail,
+        password: userData.password,
         designation: null,
         department: null,
         office: null,
@@ -278,14 +306,15 @@ export const PortalProvider = ({ children }) => {
       setSupervisors(prev => [...prev, newSupervisor]);
       setCurrentUser({ ...newSupervisor, role: 'supervisor' });
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify({ ...newSupervisor, role: 'supervisor' }));
-      showToast(`Faculty account registered for ${newSupervisor.name}. Please complete your profile.`);
+      showToast(`Faculty account registered for ${newSupervisor.name}. Official email: ${officialEmail}`);
       return { success: true };
     } else {
       const newUser = {
         id: `usr-${Date.now()}`,
-        regNo: userData.regNo.toUpperCase(),
-        name: userData.name,
-        email: userData.email,
+        regNo: cleanRegNo,
+        name: userData.name.trim(),
+        email: officialEmail,
+        password: userData.password,
         designation: null,
         department: null,
         office: null,
@@ -296,9 +325,111 @@ export const PortalProvider = ({ children }) => {
       };
       setCurrentUser(newUser);
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(newUser));
-      showToast(`Account registered. Please complete your profile.`);
+      showToast(`Account registered for ${newUser.name}. Official email: ${officialEmail}`);
       return { success: true };
     }
+  };
+
+  // Find user by official email
+  const findUserByEmail = (email) => {
+    if (!email) return null;
+    const clean = email.trim().toLowerCase();
+    
+    // Check students
+    const std = students.find(s => 
+      (s.email && s.email.toLowerCase() === clean) ||
+      (s.regNo && `${s.regNo.toLowerCase()}@${selectedCampus || 'isb'}.comsats.edu.pk` === clean) ||
+      (s.regNo && `${s.regNo.toLowerCase()}@isb.comsats.edu.pk` === clean)
+    );
+    if (std) return { user: std, role: 'student' };
+
+    // Check supervisors
+    const sup = supervisors.find(s => 
+      (s.email && s.email.toLowerCase() === clean) ||
+      (s.regNo && `${s.regNo.toLowerCase()}@comsats.edu.pk` === clean)
+    );
+    if (sup) return { user: sup, role: 'supervisor' };
+
+    // Check incharge
+    if (inchargeUser.email && inchargeUser.email.toLowerCase() === clean) {
+      return { user: inchargeUser, role: 'incharge' };
+    }
+
+    // Check HOD
+    if (hodUser.email && hodUser.email.toLowerCase() === clean) {
+      return { user: hodUser, role: 'hod' };
+    }
+
+    return null;
+  };
+
+  // Request password reset link by account email
+  const requestPasswordReset = (email) => {
+    if (!email || !email.trim()) {
+      return { success: false, error: 'Please enter your account official email.' };
+    }
+
+    const match = findUserByEmail(email);
+    if (!match) {
+      return {
+        success: false,
+        error: `No registered account found matching "${email}". Please ensure you entered your official COMSATS email.`
+      };
+    }
+
+    const resetToken = `rst-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+    const officialAccountEmail = match.user.email || email.trim().toLowerCase();
+    const resetLink = `https://cuonline.comsats.edu.pk/auth/reset-password?token=${resetToken}&email=${encodeURIComponent(officialAccountEmail)}`;
+
+    return {
+      success: true,
+      user: match.user,
+      role: match.role,
+      email: officialAccountEmail,
+      resetToken,
+      resetLink,
+      message: `Reset link generated for ${match.user.name} (${officialAccountEmail}).`
+    };
+  };
+
+  // Reset password and save new password
+  const resetPassword = (email, newPassword) => {
+    if (!newPassword || newPassword.length < 4) {
+      return { success: false, error: 'Password must be at least 4 characters long.' };
+    }
+
+    const match = findUserByEmail(email);
+    if (!match) {
+      return { success: false, error: 'Account not found. Cannot reset password.' };
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (match.role === 'student') {
+      setStudents(prev => prev.map(s => {
+        const isMatch = (s.email && s.email.toLowerCase() === cleanEmail) ||
+          (s.regNo && `${s.regNo.toLowerCase()}@${selectedCampus || 'isb'}.comsats.edu.pk` === cleanEmail) ||
+          s.id === match.user.id;
+        return isMatch ? { ...s, password: newPassword } : s;
+      }));
+    } else if (match.role === 'supervisor') {
+      setSupervisors(prev => prev.map(s => {
+        const isMatch = (s.email && s.email.toLowerCase() === cleanEmail) ||
+          (s.regNo && `${s.regNo.toLowerCase()}@comsats.edu.pk` === cleanEmail) ||
+          s.id === match.user.id;
+        return isMatch ? { ...s, password: newPassword } : s;
+      }));
+    }
+
+    // If current user is this user, update password in currentUser too
+    if (currentUser?.id === match.user.id || (currentUser?.email && currentUser.email.toLowerCase() === cleanEmail)) {
+      const updated = { ...currentUser, password: newPassword };
+      setCurrentUser(updated);
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updated));
+    }
+
+    showToast(`Password successfully reset for ${match.user.name}! You can now sign in with your new password.`);
+    return { success: true, user: match.user, role: match.role };
   };
 
   // Update user profile information
@@ -318,9 +449,9 @@ export const PortalProvider = ({ children }) => {
     localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updated));
 
     if (currentUser.role === 'student') {
-      setStudents(prev => prev.map(std => std.id === currentUser.id ? { ...std, ...updatedFields, needsProfileCompletion: false } : std));
+      setStudents(prev => prev.map(std => std.id === currentUser.id ? { ...std, ...sanitizedFields, needsProfileCompletion: false } : std));
     } else if (currentUser.role === 'supervisor') {
-      setSupervisors(prev => prev.map(sup => sup.id === currentUser.id ? { ...sup, ...updatedFields, needsProfileCompletion: false } : sup));
+      setSupervisors(prev => prev.map(sup => sup.id === currentUser.id ? { ...sup, ...sanitizedFields, needsProfileCompletion: false } : sup));
     }
     showToast('Official profile details updated successfully!');
   };
@@ -629,6 +760,8 @@ export const PortalProvider = ({ children }) => {
         // Methods
         login,
         signup,
+        requestPasswordReset,
+        resetPassword,
         updateUserProfile,
         switchRole,
         assignSupervisor,

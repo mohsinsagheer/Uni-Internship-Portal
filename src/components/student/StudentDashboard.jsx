@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   FileText,
   UploadCloud,
@@ -45,6 +45,7 @@ export default function StudentDashboard({
     uploadStudentDocument,
     deleteStudentDocument,
     updateUserAvatar,
+    updateUserProfile,
   } = usePortal();
 
   const avatarInputRef = useRef(null);
@@ -80,7 +81,7 @@ export default function StudentDashboard({
   };
 
   const formatSemester = (value) => {
-    if (!value && value !== 0) return '5th Semester';
+    if (!value && value !== 0) return 'NULL';
 
     if (typeof value === 'number') {
       return `${value}${getOrdinalSuffix(value)} Semester`;
@@ -96,14 +97,14 @@ export default function StudentDashboard({
   };
 
   const getAcademicYearLabel = (value) => {
-    const match = String(value).match(/\d+/);
+    const match = String(value || '').match(/\d+/);
     const semesterNumber = match ? Number(match[0]) : null;
 
-    if (semesterNumber === null) return 'Freshie';
+    if (semesterNumber === null) return 'NULL';
     if (semesterNumber > 2 && semesterNumber < 5) return 'Second Year';
     if (semesterNumber > 4 && semesterNumber < 7) return 'Third Year';
     if (semesterNumber > 6) return 'Senior';
-    return 'Freshie';
+    return 'First Year';
   };
 
   const supervisor = getSupervisorForStudent(currentUser);
@@ -115,22 +116,46 @@ export default function StudentDashboard({
 
   // Corporate Internship Placement edit state
   const [editingPlacement, setEditingPlacement] = useState(false);
-  const [placementData, setPlacementData] = useState({
-    company: currentUser?.internshipCompany || 'Systems Limited',
-    role: currentUser?.internshipRole || 'Software Engineering Intern',
-    mode: currentUser?.internshipMode || 'On-site',
-    duration: currentUser?.internshipDuration || '8 Weeks (Mandatory)',
-    cgpa: currentUser?.cgpa || '3.50',
-    creditHoursCompleted: currentUser?.creditHoursCompleted || '110',
+  const [editDraft, setEditDraft] = useState({
+    company: currentUser?.internshipCompany || '',
+    role: currentUser?.internshipRole || '',
+    mode: currentUser?.internshipMode || '',
+    duration: currentUser?.internshipDuration || '',
+    cgpa: currentUser?.cgpa || '',
+    creditHoursCompleted: currentUser?.creditHoursCompleted || '',
   });
-  const [editDraft, setEditDraft] = useState({ ...placementData });
+
+  useEffect(() => {
+    setEditDraft({
+      company: currentUser?.internshipCompany || '',
+      role: currentUser?.internshipRole || '',
+      mode: currentUser?.internshipMode || '',
+      duration: currentUser?.internshipDuration || '',
+      cgpa: currentUser?.cgpa || '',
+      creditHoursCompleted: currentUser?.creditHoursCompleted || '',
+    });
+  }, [currentUser]);
 
   const handleSavePlacement = () => {
-    setPlacementData({ ...editDraft });
+    updateUserProfile({
+      internshipCompany: editDraft.company || null,
+      internshipRole: editDraft.role || null,
+      internshipMode: editDraft.mode || null,
+      internshipDuration: editDraft.duration || null,
+      cgpa: editDraft.cgpa || null,
+      creditHoursCompleted: editDraft.creditHoursCompleted || null,
+    });
     setEditingPlacement(false);
   };
   const handleCancelPlacement = () => {
-    setEditDraft({ ...placementData });
+    setEditDraft({
+      company: currentUser?.internshipCompany || '',
+      role: currentUser?.internshipRole || '',
+      mode: currentUser?.internshipMode || '',
+      duration: currentUser?.internshipDuration || '',
+      cgpa: currentUser?.cgpa || '',
+      creditHoursCompleted: currentUser?.creditHoursCompleted || '',
+    });
     setEditingPlacement(false);
   };
 
@@ -281,16 +306,19 @@ export default function StudentDashboard({
                     </div>
 
                     <p className="text-sm font-bold text-slate-700">
-                      {currentUser?.program || 'Bachelor of Science in Computer Science'}
+                      {currentUser?.program || 'NULL'}
                     </p>
                     <p className="text-xs text-slate-500 flex items-center gap-1.5">
                       <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{currentUser?.department || 'Department of Computer Science'} · Islamabad Campus</span>
+                      <span>{currentUser?.department || 'NULL'}</span>
                     </p>
-                    <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                      <Mail className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="font-mono">{currentUser?.email || `${currentUser?.regNo?.toLowerCase()}@isb.comsats.edu.pk`}</span>
-                    </p>
+                    <div className="text-xs text-slate-700 flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 inline-flex mt-1">
+                      <Mail className="w-3.5 h-3.5 text-[#c29b38]" />
+                      <span className="font-bold text-slate-500">Official Email:</span>
+                      <span className="font-mono font-bold text-[#002147]">
+                        {currentUser?.email || (currentUser?.regNo ? `${currentUser.regNo.toLowerCase()}@isb.comsats.edu.pk` : 'NULL')}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -333,9 +361,11 @@ export default function StudentDashboard({
                     Semester
                   </span>
                   <div className="text-base font-extrabold text-[#002147] mt-1">
-                    {formatSemester(currentUser?.semester)}
+                    {currentUser?.semester ? formatSemester(currentUser.semester) : 'NULL'}
                   </div>
-                  <span className="text-[10px] text-slate-400">{getAcademicYearLabel(currentUser?.semester)}</span>
+                  <span className="text-[10px] text-slate-400">
+                    {currentUser?.semester ? getAcademicYearLabel(currentUser.semester) : 'NULL'}
+                  </span>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
@@ -343,9 +373,11 @@ export default function StudentDashboard({
                     Cumulative GPA
                   </span>
                   <div className="text-base font-extrabold text-emerald-700 font-mono mt-1">
-                    {currentUser?.cgpa || placementData.cgpa} / 4.00
+                    {currentUser?.cgpa ? `${currentUser.cgpa} / 4.00` : 'NULL'}
                   </div>
-                  <span className="text-[10px] text-emerald-600 font-medium">Eligible for Internship</span>
+                  <span className="text-[10px] text-emerald-600 font-medium">
+                    {currentUser?.cgpa ? (Number(currentUser.cgpa) >= 2.0 ? 'Eligible for Internship' : 'Academic Alert') : 'NULL'}
+                  </span>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
@@ -353,10 +385,15 @@ export default function StudentDashboard({
                     Credit Hours Completed
                   </span>
                   <div className="text-base font-extrabold text-[#002147] font-mono mt-1">
-                    {currentUser?.creditHoursCompleted || placementData.creditHoursCompleted} Cr
+                    {currentUser?.creditHoursCompleted ? `${currentUser.creditHoursCompleted} Cr` : 'NULL'}
                   </div>
                   <div className="w-full bg-slate-200 h-1.5 rounded-full mt-1.5 overflow-hidden">
-                    <div className="bg-[#002147] h-full rounded-full" style={{ width: '82%' }}></div>
+                    <div
+                      className="bg-[#002147] h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${currentUser?.creditHoursCompleted ? Math.min(100, Math.round((Number(currentUser.creditHoursCompleted) / 130) * 100)) : 0}%`
+                      }}
+                    ></div>
                   </div>
                 </div>
 
@@ -402,15 +439,15 @@ export default function StudentDashboard({
                           {supervisor.name}
                         </h4>
                         <p className="text-sm text-sky-800 font-bold">
-                          {supervisor.designation}
+                          {supervisor.designation || 'NULL'}
                         </p>
                         <a
-                          href={`mailto:${supervisor.email}`}
+                          href={`mailto:${supervisor.email || ''}`}
                           className="text-base text-slate-700 font-mono font-bold hover:text-[#002147] inline-flex items-center gap-1.5 truncate"
                           title={`Email ${supervisor.name}`}
                         >
                           <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate">{supervisor.email}</span>
+                          <span className="truncate">{supervisor.email || 'NULL'}</span>
                         </a>
                       </div>
                     </div>
@@ -418,11 +455,11 @@ export default function StudentDashboard({
                     <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
                       <div className="flex justify-between gap-3 py-1 border-b border-slate-200">
                         <span className="text-slate-500 font-medium">Faculty Office:</span>
-                        <span className="font-semibold text-slate-800 text-right">{supervisor.office}</span>
+                        <span className="font-semibold text-slate-800 text-right">{supervisor.office || 'NULL'}</span>
                       </div>
                       <div className="flex justify-between gap-3 py-1 border-b border-slate-200">
                         <span className="text-slate-500 font-medium">Department:</span>
-                        <span className="font-semibold text-slate-800 text-right">{supervisor.department}</span>
+                        <span className="font-semibold text-slate-800 text-right">{supervisor.department || 'NULL'}</span>
                       </div>
                       <div className="flex justify-between gap-3 py-1">
                         <span className="text-slate-500 font-medium">Clearance Authority:</span>
@@ -491,27 +528,31 @@ export default function StudentDashboard({
                   <div className="space-y-2.5 text-xs">
                     <div className="flex justify-between py-1 border-b border-slate-50">
                       <span className="text-slate-500 font-medium">Host Enterprise:</span>
-                      <span className="font-bold text-slate-900">{placementData.company}</span>
+                      <span className="font-bold text-slate-900">{currentUser?.internshipCompany || 'NULL'}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-50">
                       <span className="text-slate-500 font-medium">Job Role / Designation:</span>
-                      <span className="font-semibold text-slate-800">{placementData.role}</span>
+                      <span className="font-semibold text-slate-800">{currentUser?.internshipRole || 'NULL'}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-50">
                       <span className="text-slate-500 font-medium">Internship Mode:</span>
-                      <span className="font-semibold text-slate-800">{placementData.mode}</span>
+                      <span className="font-semibold text-slate-800">{currentUser?.internshipMode || 'NULL'}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-50">
                       <span className="text-slate-500 font-medium">Duration:</span>
-                      <span className="font-semibold text-slate-800">{placementData.duration}</span>
+                      <span className="font-semibold text-slate-800">{currentUser?.internshipDuration || 'NULL'}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-50">
                       <span className="text-slate-500 font-medium">Credit Hours Completed:</span>
-                      <span className="font-semibold text-slate-800 font-mono">{currentUser?.creditHoursCompleted || placementData.creditHoursCompleted}</span>
+                      <span className="font-semibold text-slate-800 font-mono">
+                        {currentUser?.creditHoursCompleted ? `${currentUser.creditHoursCompleted} Cr` : 'NULL'}
+                      </span>
                     </div>
                     <div className="flex justify-between py-1">
                       <span className="text-slate-500 font-medium">Verification Status:</span>
-                      <span className="font-bold text-emerald-700">Enterprise Verified</span>
+                      <span className="font-bold text-emerald-700">
+                        {currentUser?.internshipCompany ? 'Enterprise Registered' : 'NULL'}
+                      </span>
                     </div>
                   </div>
                 ) : (

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Users,
   UserPlus,
@@ -40,6 +40,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
     addTemplate,
     deleteTemplate,
     stats,
+    updateUserProfile,
     setSubmissionFilter,
     setSearchQuery,
     setSelectedSupervisorFilter,
@@ -65,17 +66,35 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState({
     name: currentUser?.name || '',
-    designation: currentUser?.designation || 'Internship Incharge',
-    department: currentUser?.department || 'Computer Science',
+    designation: currentUser?.designation || '',
+    department: currentUser?.department || '',
     email: currentUser?.email || '',
     phone: currentUser?.phone || '',
   });
   const [savedProfile, setSavedProfile] = useState({ ...profileDraft });
 
+  useEffect(() => {
+    const updated = {
+      name: currentUser?.name || '',
+      designation: currentUser?.designation || '',
+      department: currentUser?.department || '',
+      email: currentUser?.email || '',
+      phone: currentUser?.phone || '',
+    };
+    setProfileDraft(updated);
+    setSavedProfile(updated);
+  }, [currentUser]);
+
   const handleSaveProfile = () => {
+    updateUserProfile({
+      name: profileDraft.name || null,
+      designation: profileDraft.designation || null,
+      department: profileDraft.department || null,
+      email: profileDraft.email || null,
+      phone: profileDraft.phone || null,
+    });
     setSavedProfile({ ...profileDraft });
     setEditingProfile(false);
-    showToast('Profile details updated successfully.');
   };
   const handleCancelProfile = () => {
     setProfileDraft({ ...savedProfile });
@@ -374,27 +393,32 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
                   <div className="space-y-5">
                     <div>
                       <h2 className="text-3xl sm:text-4xl font-black text-white leading-tight tracking-tight">
-                        {savedProfile.name || currentUser?.name}
+                        {savedProfile.name || currentUser?.name || 'NULL'}
                       </h2>
                       <p className="mt-1.5 text-base font-semibold" style={{ color: 'rgba(254,243,199,0.90)' }}>
-                        {savedProfile.designation}
+                        {savedProfile.designation || currentUser?.designation || 'NULL'}
                       </p>
                       <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.52)' }}>
-                        Department of {savedProfile.department}&nbsp;·&nbsp;
-                        <span className="font-mono font-bold" style={{ color: '#fef3c7' }}>{currentUser?.regNo}</span>
+                        {savedProfile.department || currentUser?.department ? `Department of ${savedProfile.department || currentUser?.department}` : 'Department: NULL'}&nbsp;·&nbsp;
+                        <span className="font-mono font-bold" style={{ color: '#fef3c7' }}>{currentUser?.regNo || 'NULL'}</span>
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2.5">
-                      {savedProfile.email && (
-                        <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
-                          style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.82)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(6px)' }}>
-                          <Mail className="w-4 h-4 text-amber-300 shrink-0" />{savedProfile.email}
-                        </span>
-                      )}
-                      {savedProfile.phone && (
+                      <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
+                        style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.92)', border: '1px solid rgba(255,255,255,0.22)', backdropFilter: 'blur(6px)' }}>
+                        <Mail className="w-4 h-4 text-amber-300 shrink-0" />
+                        <span className="font-bold text-amber-200">Official Email:</span>
+                        <span className="font-mono font-bold">{savedProfile.email || currentUser?.email || 'NULL'}</span>
+                      </span>
+                      {savedProfile.phone ? (
                         <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
                           style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.82)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(6px)' }}>
                           <Phone className="w-4 h-4 text-amber-300 shrink-0" />{savedProfile.phone}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
+                          style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.82)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(6px)' }}>
+                          <Phone className="w-4 h-4 text-slate-400 shrink-0" />Phone: NULL
                         </span>
                       )}
                       <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"

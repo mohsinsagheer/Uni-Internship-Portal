@@ -299,13 +299,13 @@ export default function DocumentViewerModal({
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase block">Academic Program</span>
-                  <p className="font-semibold text-slate-800">{currentStudent.program || 'BS Computer Science'}</p>
-                  <p className="text-[11px] text-slate-500">{currentStudent.semester || '7th Semester'}</p>
+                  <p className="font-semibold text-slate-800">{currentStudent.program || 'NULL'}</p>
+                  <p className="text-[11px] text-slate-500">{currentStudent.semester || 'NULL'}</p>
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase block">Host Enterprise</span>
-                  <p className="font-semibold text-slate-800">{currentStudent.internshipCompany || 'Registered Enterprise'}</p>
-                  <p className="text-[11px] text-slate-500">{currentStudent.internshipRole || 'Intern'}</p>
+                  <p className="font-semibold text-slate-800">{currentStudent.internshipCompany || 'NULL'}</p>
+                  <p className="text-[11px] text-slate-500">{currentStudent.internshipRole || 'NULL'}</p>
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase block">Submission Date</span>
