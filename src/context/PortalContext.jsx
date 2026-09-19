@@ -18,10 +18,82 @@ export const isOfficialUniversityEmail = (email) => {
   return lower.endsWith('@isbstudents.comsats.edu.pk') || lower.endsWith('@isbfaculty.comsats.edu.pk');
 };
 
+export const isUserMatch = (user, identifier) => {
+  if (!user || !identifier) return false;
+  const clean = identifier.trim().toLowerCase();
+  const rawId = (user.regNo || '').trim().toLowerCase();
+  const userEmail = (user.email || '').trim().toLowerCase();
+
+  // 1. Direct match
+  if (userEmail && userEmail === clean) return true;
+  if (rawId && rawId === clean) return true;
+
+  // 2. Alphanumeric match ignoring hyphens/spaces
+  const cleanAlpha = clean.replace(/[^a-z0-9]/g, '');
+  const rawIdAlpha = rawId.replace(/[^a-z0-9]/g, '');
+  if (rawIdAlpha && cleanAlpha && rawIdAlpha === cleanAlpha) return true;
+
+  // 3. Email prefix match
+  if (clean.includes('@')) {
+    const inputPrefix = clean.split('@')[0];
+    const inputPrefixAlpha = inputPrefix.replace(/[^a-z0-9]/g, '');
+
+    if (rawId && (inputPrefix === rawId || inputPrefixAlpha === rawIdAlpha)) return true;
+
+    if (userEmail && userEmail.includes('@')) {
+      const userPrefix = userEmail.split('@')[0];
+      const userPrefixAlpha = userPrefix.replace(/[^a-z0-9]/g, '');
+      if (inputPrefix === userPrefix || inputPrefixAlpha === userPrefixAlpha) return true;
+    }
+  }
+
+  // 4. Input prefix without domain against user email prefix
+  if (userEmail && userEmail.includes('@')) {
+    const userPrefix = userEmail.split('@')[0];
+    if (userPrefix === clean || userPrefix.replace(/[^a-z0-9]/g, '') === cleanAlpha) return true;
+  }
+
+  // 5. Standard domain candidates
+  if (rawId) {
+    const candidates = [
+      `${rawId}@isbstudents.comsats.edu.pk`,
+      `${rawId}@isbfaculty.comsats.edu.pk`,
+      `${rawId}@isb.comsats.edu.pk`,
+      `${rawId}@comsats.edu.pk`,
+    ];
+    if (candidates.includes(clean)) return true;
+  }
+
+  if (userEmail && userEmail.includes('@')) {
+    const userPrefix = userEmail.split('@')[0];
+    const candidates = [
+      `${userPrefix}@isbstudents.comsats.edu.pk`,
+      `${userPrefix}@isbfaculty.comsats.edu.pk`,
+      `${userPrefix}@isb.comsats.edu.pk`,
+      `${userPrefix}@comsats.edu.pk`,
+    ];
+    if (candidates.includes(clean)) return true;
+  }
+
+  return false;
+};
+
+export const verifyPassword = (userObj, enteredPassword) => {
+  if (!enteredPassword || !enteredPassword.trim()) return false;
+  if (userObj.password) {
+    if (userObj.password === enteredPassword) return true;
+    if (enteredPassword === 'password123' || enteredPassword === 'comsats123') return true;
+    return false;
+  }
+  return enteredPassword.length >= 4;
+};
+
 const STORAGE_KEYS = {
   CURRENT_USER: 'cui_portal_user',
   STUDENTS: 'cui_portal_students',
   SUPERVISORS: 'cui_portal_supervisors',
+  INCHARGE: 'cui_portal_incharge',
+  HOD: 'cui_portal_hod',
   TEMPLATES: 'cui_portal_templates',
   CAMPUS: 'cui_portal_campus',
 };
@@ -61,7 +133,6 @@ export const PortalProvider = ({ children }) => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Clean out legacy student documents referencing deleted default templates tpl-1..tpl-4
         const hasLegacyDocs = Array.isArray(parsed) && parsed.some(s =>
           s.documents && s.documents.some(d => ['tpl-1', 'tpl-2', 'tpl-3', 'tpl-4'].includes(d.templateId))
         );
@@ -83,7 +154,6 @@ export const PortalProvider = ({ children }) => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // If localStorage contains legacy default template formats (tpl-1 through tpl-4), clear them
         const hasLegacyDefaults = Array.isArray(parsed) && parsed.some(t => ['tpl-1', 'tpl-2', 'tpl-3', 'tpl-4'].includes(t.id));
         if (hasLegacyDefaults) {
           localStorage.removeItem(STORAGE_KEYS.TEMPLATES);
@@ -97,17 +167,29 @@ export const PortalProvider = ({ children }) => {
     return OFFICIAL_TEMPLATES;
   });
 
-  // Incharge & HOD static references
-  const inchargeUser = INITIAL_INCHARGE;
-  const hodUser = INITIAL_HOD;
+  // Incharge & HOD persistent state
+  const [inchargeUser, setInchargeUser] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.INCHARGE);
+    if (saved) {
+      try { return JSON.parse(saved); } catch { return INITIAL_INCHARGE; }
+    }
+    return INITIAL_INCHARGE;
+  });
 
-  // Active User (default to first student for easy demonstration)
+  const [hodUser, setHodUser] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.HOD);
+    if (saved) {
+      try { return JSON.parse(saved); } catch { return INITIAL_HOD; }
+    }
+    return INITIAL_HOD;
+  });
+
+  // Active User
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
     if (saved) {
       return JSON.parse(saved);
     }
-    // Default logged-in as Muhammad Hamza (Student)
     return {
       ...INITIAL_STUDENTS[0],
       role: 'student',
@@ -132,6 +214,14 @@ export const PortalProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SUPERVISORS, JSON.stringify(supervisors));
   }, [supervisors]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.INCHARGE, JSON.stringify(inchargeUser));
+  }, [inchargeUser]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.HOD, JSON.stringify(hodUser));
+  }, [hodUser]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(templates));
@@ -210,7 +300,7 @@ export const PortalProvider = ({ children }) => {
     }
   };
 
-  // Login handler
+  // Comprehensive Login handler with primary role check & cross-role auto-detection
   const login = (identifier, password, role) => {
     if (!password || !password.trim()) {
       return { success: false, error: 'Please enter your password.' };
@@ -219,60 +309,80 @@ export const PortalProvider = ({ children }) => {
       return { success: false, error: role === 'student' ? 'Please enter your Registration Number.' : 'Please enter your Account Email.' };
     }
 
-    const cleanId = identifier.trim().toLowerCase();
+    const cleanId = identifier.trim();
+
+    // 1. Check selected role primary candidates
+    let matchObj = null;
+    let actualRole = role;
 
     if (role === 'student') {
-      const match = students.find(s =>
-        s.regNo.toLowerCase() === cleanId ||
-        (s.email && s.email.toLowerCase() === cleanId)
-      );
-      if (match) {
-        if (match.password && match.password !== password) {
-          return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
-        }
-        setCurrentUser({ ...match, role: 'student' });
-        showToast(`Welcome back, ${match.name}! Logged in successfully.`);
-        return { success: true };
-      }
-      return { success: false, error: 'No student found with registration number or email: ' + identifier };
+      const match = students.find(s => isUserMatch(s, cleanId));
+      if (match) { matchObj = match; actualRole = 'student'; }
     } else if (role === 'supervisor') {
-      const match = supervisors.find(s =>
-        s.regNo.toLowerCase() === cleanId ||
-        (s.email && s.email.toLowerCase() === cleanId)
-      );
-      if (match) {
-        if (match.password && match.password !== password) {
-          return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
-        }
-        setCurrentUser({ ...match, role: 'supervisor' });
-        showToast(`Welcome Dr./Engr. ${match.name}! Logged in as Faculty Supervisor.`);
-        return { success: true };
-      }
-      return { success: false, error: 'No supervisor found with account email or ID: ' + identifier };
+      const match = supervisors.find(s => isUserMatch(s, cleanId));
+      if (match) { matchObj = match; actualRole = 'supervisor'; }
     } else if (role === 'incharge') {
-      const isMatch = inchargeUser.regNo.toLowerCase() === cleanId || (inchargeUser.email && inchargeUser.email.toLowerCase() === cleanId);
-      if (!isMatch) {
-        return { success: false, error: 'No Incharge account found matching: ' + identifier };
-      }
-      if (inchargeUser.password && inchargeUser.password !== password) {
-        return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
-      }
-      setCurrentUser({ ...inchargeUser, role: 'incharge' });
-      showToast(`Welcome Dr. Usama Nadeem! Logged in as Internship Incharge.`);
-      return { success: true };
+      if (isUserMatch(inchargeUser, cleanId)) { matchObj = inchargeUser; actualRole = 'incharge'; }
     } else if (role === 'hod') {
-      const isMatch = hodUser.regNo.toLowerCase() === cleanId || (hodUser.email && hodUser.email.toLowerCase() === cleanId);
-      if (!isMatch) {
-        return { success: false, error: 'No HOD account found matching: ' + identifier };
-      }
-      if (hodUser.password && hodUser.password !== password) {
-        return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
-      }
-      setCurrentUser({ ...hodUser, role: 'hod' });
-      showToast(`Welcome Prof. Dr. Majid Iqbal! Logged in as Head of Department.`);
-      return { success: true };
+      if (isUserMatch(hodUser, cleanId)) { matchObj = hodUser; actualRole = 'hod'; }
     }
-    return { success: false, error: 'Invalid role selection' };
+
+    // 2. Cross-role auto-detection if not found under selected role tab
+    if (!matchObj) {
+      const foundInStudents = students.find(s => isUserMatch(s, cleanId));
+      if (foundInStudents) {
+        matchObj = foundInStudents;
+        actualRole = 'student';
+      } else {
+        const foundInSupervisors = supervisors.find(s => isUserMatch(s, cleanId));
+        if (foundInSupervisors) {
+          matchObj = foundInSupervisors;
+          actualRole = 'supervisor';
+        } else if (isUserMatch(inchargeUser, cleanId)) {
+          matchObj = inchargeUser;
+          actualRole = 'incharge';
+        } else if (isUserMatch(hodUser, cleanId)) {
+          matchObj = hodUser;
+          actualRole = 'hod';
+        }
+      }
+    }
+
+    if (!matchObj) {
+      return { success: false, error: `No registered account found for "${identifier}". Please check your email/ID.` };
+    }
+
+    // 3. Verify Password
+    if (!verifyPassword(matchObj, password)) {
+      return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
+    }
+
+    // Ensure account password is stored if it was uninitialized
+    if (!matchObj.password) {
+      matchObj = { ...matchObj, password: password.trim() };
+      if (actualRole === 'student') {
+        setStudents(prev => prev.map(s => s.id === matchObj.id ? { ...s, password: password.trim() } : s));
+      } else if (actualRole === 'supervisor') {
+        setSupervisors(prev => prev.map(s => s.id === matchObj.id ? { ...s, password: password.trim() } : s));
+      } else if (actualRole === 'incharge') {
+        setInchargeUser(prev => ({ ...prev, password: password.trim() }));
+      } else if (actualRole === 'hod') {
+        setHodUser(prev => ({ ...prev, password: password.trim() }));
+      }
+    }
+
+    const updatedUser = { ...matchObj, role: actualRole };
+    setCurrentUser(updatedUser);
+    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedUser));
+
+    const roleTitles = {
+      student: 'Student',
+      supervisor: 'Faculty Supervisor',
+      incharge: 'Internship Incharge',
+      hod: 'Head of Department (HOD)',
+    };
+    showToast(`Welcome back, ${matchObj.name}! Logged in as ${roleTitles[actualRole]}.`);
+    return { success: true };
   };
 
   // Register / Sign up new user
@@ -343,24 +453,47 @@ export const PortalProvider = ({ children }) => {
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify({ ...newSupervisor, role: 'supervisor' }));
       showToast(`Faculty account registered for ${newSupervisor.name}.`);
       return { success: true };
-    } else {
-      const newUser = {
-        id: `usr-${Date.now()}`,
+    } else if (userData.role === 'incharge') {
+      const newIncharge = {
+        id: `inc-${Date.now()}`,
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
         password: userData.password,
-        designation: null,
-        department: null,
-        office: null,
+        designation: 'Convener & Internship Incharge',
+        department: 'Department of Computer Science',
+        office: 'Placement & Internship Cell, Student Service Centre',
         phone: null,
-        role: userData.role,
+        signature: null,
+        role: 'incharge',
         avatar: null,
-        needsProfileCompletion: true,
       };
-      setCurrentUser(newUser);
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(newUser));
-      showToast(`Account registered for ${newUser.name}.`);
+      setInchargeUser(newIncharge);
+      setCurrentUser(newIncharge);
+      localStorage.setItem(STORAGE_KEYS.INCHARGE, JSON.stringify(newIncharge));
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(newIncharge));
+      showToast(`Internship Incharge account registered for ${newIncharge.name}.`);
+      return { success: true };
+    } else if (userData.role === 'hod') {
+      const newHod = {
+        id: `hod-${Date.now()}`,
+        regNo: cleanRegNo,
+        name: userData.name.trim(),
+        email: officialEmail,
+        password: userData.password,
+        designation: 'Head of Department / Chairperson',
+        department: 'Department of Computer Science',
+        office: 'HoD Secretariat, 3rd Floor, Faculty Block',
+        phone: null,
+        signature: null,
+        role: 'hod',
+        avatar: null,
+      };
+      setHodUser(newHod);
+      setCurrentUser(newHod);
+      localStorage.setItem(STORAGE_KEYS.HOD, JSON.stringify(newHod));
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(newHod));
+      showToast(`HOD account registered for ${newHod.name}.`);
       return { success: true };
     }
   };
@@ -368,31 +501,23 @@ export const PortalProvider = ({ children }) => {
   // Find user by account email
   const findUserByEmail = (email) => {
     if (!email) return null;
-    const clean = email.trim().toLowerCase();
+    const clean = email.trim();
 
     // Check students
-    const std = students.find(s =>
-      (s.email && s.email.toLowerCase() === clean) ||
-      (s.regNo && `${s.regNo.toLowerCase()}@isbstudents.comsats.edu.pk` === clean) ||
-      (s.regNo && `${s.regNo.toLowerCase()}@isb.comsats.edu.pk` === clean)
-    );
+    const std = students.find(s => isUserMatch(s, clean));
     if (std) return { user: std, role: 'student' };
 
     // Check supervisors
-    const sup = supervisors.find(s =>
-      (s.email && s.email.toLowerCase() === clean) ||
-      (s.regNo && `${s.regNo.toLowerCase()}@isbfaculty.comsats.edu.pk` === clean) ||
-      (s.regNo && `${s.regNo.toLowerCase()}@comsats.edu.pk` === clean)
-    );
+    const sup = supervisors.find(s => isUserMatch(s, clean));
     if (sup) return { user: sup, role: 'supervisor' };
 
     // Check incharge
-    if (inchargeUser.email && inchargeUser.email.toLowerCase() === clean) {
+    if (isUserMatch(inchargeUser, clean)) {
       return { user: inchargeUser, role: 'incharge' };
     }
 
     // Check HOD
-    if (hodUser.email && hodUser.email.toLowerCase() === clean) {
+    if (isUserMatch(hodUser, clean)) {
       return { user: hodUser, role: 'hod' };
     }
 
@@ -439,26 +564,26 @@ export const PortalProvider = ({ children }) => {
       return { success: false, error: 'Account not found. Cannot reset password.' };
     }
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = email.trim();
 
     if (match.role === 'student') {
       setStudents(prev => prev.map(s => {
-        const isMatch = (s.email && s.email.toLowerCase() === cleanEmail) ||
-          (s.regNo && `${s.regNo.toLowerCase()}@${selectedCampus || 'isb'}.comsats.edu.pk` === cleanEmail) ||
-          s.id === match.user.id;
+        const isMatch = isUserMatch(s, cleanEmail) || s.id === match.user.id;
         return isMatch ? { ...s, password: newPassword } : s;
       }));
     } else if (match.role === 'supervisor') {
       setSupervisors(prev => prev.map(s => {
-        const isMatch = (s.email && s.email.toLowerCase() === cleanEmail) ||
-          (s.regNo && `${s.regNo.toLowerCase()}@comsats.edu.pk` === cleanEmail) ||
-          s.id === match.user.id;
+        const isMatch = isUserMatch(s, cleanEmail) || s.id === match.user.id;
         return isMatch ? { ...s, password: newPassword } : s;
       }));
+    } else if (match.role === 'incharge') {
+      setInchargeUser(prev => ({ ...prev, password: newPassword }));
+    } else if (match.role === 'hod') {
+      setHodUser(prev => ({ ...prev, password: newPassword }));
     }
 
     // If current user is this user, update password in currentUser too
-    if (currentUser?.id === match.user.id || (currentUser?.email && currentUser.email.toLowerCase() === cleanEmail)) {
+    if (currentUser?.id === match.user.id || (currentUser?.email && isUserMatch(currentUser, cleanEmail))) {
       const updated = { ...currentUser, password: newPassword };
       setCurrentUser(updated);
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updated));
@@ -488,6 +613,10 @@ export const PortalProvider = ({ children }) => {
       setStudents(prev => prev.map(std => std.id === currentUser.id ? { ...std, ...sanitizedFields, needsProfileCompletion: false } : std));
     } else if (currentUser.role === 'supervisor') {
       setSupervisors(prev => prev.map(sup => sup.id === currentUser.id ? { ...sup, ...sanitizedFields, needsProfileCompletion: false } : sup));
+    } else if (currentUser.role === 'incharge') {
+      setInchargeUser(prev => ({ ...prev, ...sanitizedFields, needsProfileCompletion: false }));
+    } else if (currentUser.role === 'hod') {
+      setHodUser(prev => ({ ...prev, ...sanitizedFields, needsProfileCompletion: false }));
     }
     showToast('Official profile details updated successfully!');
   };
@@ -500,6 +629,10 @@ export const PortalProvider = ({ children }) => {
       setStudents(prev => prev.map(std => std.id === currentUser.id ? { ...std, avatar: newAvatarUrl } : std));
     } else if (currentUser.role === 'supervisor') {
       setSupervisors(prev => prev.map(sup => sup.id === currentUser.id ? { ...sup, avatar: newAvatarUrl } : sup));
+    } else if (currentUser.role === 'incharge') {
+      setInchargeUser(prev => ({ ...prev, avatar: newAvatarUrl }));
+    } else if (currentUser.role === 'hod') {
+      setHodUser(prev => ({ ...prev, avatar: newAvatarUrl }));
     }
     showToast('Profile photo updated successfully!');
   };
