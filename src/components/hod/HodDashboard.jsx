@@ -122,7 +122,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
   // ═══════════════════════════════════════════════════════════════
   // TAB: DASHBOARD (HOD Profile overview + KPI cards)
   // ═══════════════════════════════════════════════════════════════
-  if (activeTab === 'dashboard') {
+  if (activeTab === 'dashboard' || !activeTab) {
     return (
       <div className="space-y-6 fade-in">
 

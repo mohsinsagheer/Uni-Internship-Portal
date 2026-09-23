@@ -31,6 +31,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
     templates,
     signDocument,
     showToast,
+    sendReminder,
     updateUserAvatar,
     updateUserProfile,
     isStudentFullyCleared,
@@ -104,7 +105,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
   };
 
   const handleSendReminder = (student) => {
-    showToast(`Reminder sent to ${student.name} (${student.regNo}) for document submission.`);
+    sendReminder(student.id);
   };
 
   const handleDownloadTemplate = (tpl) => {
@@ -348,7 +349,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
   // ═══════════════════════════════════
   // TAB: DASHBOARD (overview)
   // ═══════════════════════════════════
-  if (activeTab === 'dashboard') {
+  if (activeTab === 'dashboard' || !activeTab) {
     return (
       <div className="space-y-6 fade-in">
         <ProfileCard />

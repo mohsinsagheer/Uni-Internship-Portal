@@ -1,17 +1,27 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import {
   CAMPUSES,
   INITIAL_STUDENTS,
   INITIAL_SUPERVISORS,
-  INITIAL_INCHARGE,
-  INITIAL_HOD,
+  INITIAL_INCHARGES,
+  INITIAL_HODS,
   OFFICIAL_TEMPLATES,
   NOTICES
 } from '../data/initialData';
+import { hashPassword, verifyPasswordHash, ensureHashedPassword } from '../utils/crypto';
+import {
+  persistStudents,
+  persistUsers,
+  persistTemplates,
+  hydrateStudents,
+  hydrateUsers,
+  hydrateTemplates,
+  deleteDocumentBlobs,
+  deleteTemplateBlobs,
+} from '../utils/blobStore';
 
 const PortalContext = createContext();
 
-// ── Module-level helpers ──
 export const isOfficialUniversityEmail = (email) => {
   if (!email || typeof email !== 'string') return false;
   const lower = email.trim().toLowerCase();
@@ -24,16 +34,13 @@ export const isUserMatch = (user, identifier) => {
   const rawId = (user.regNo || '').trim().toLowerCase();
   const userEmail = (user.email || '').trim().toLowerCase();
 
-  // 1. Direct match
   if (userEmail && userEmail === clean) return true;
   if (rawId && rawId === clean) return true;
 
-  // 2. Alphanumeric match ignoring hyphens/spaces
   const cleanAlpha = clean.replace(/[^a-z0-9]/g, '');
   const rawIdAlpha = rawId.replace(/[^a-z0-9]/g, '');
   if (rawIdAlpha && cleanAlpha && rawIdAlpha === cleanAlpha) return true;
 
-  // 3. Email prefix match
   if (clean.includes('@')) {
     const inputPrefix = clean.split('@')[0];
     const inputPrefixAlpha = inputPrefix.replace(/[^a-z0-9]/g, '');
@@ -47,13 +54,11 @@ export const isUserMatch = (user, identifier) => {
     }
   }
 
-  // 4. Input prefix without domain against user email prefix
   if (userEmail && userEmail.includes('@')) {
     const userPrefix = userEmail.split('@')[0];
     if (userPrefix === clean || userPrefix.replace(/[^a-z0-9]/g, '') === cleanAlpha) return true;
   }
 
-  // 5. Standard domain candidates
   if (rawId) {
     const candidates = [
       `${rawId}@isbstudents.comsats.edu.pk`,
@@ -78,16 +83,6 @@ export const isUserMatch = (user, identifier) => {
   return false;
 };
 
-export const verifyPassword = (userObj, enteredPassword) => {
-  if (!enteredPassword || !enteredPassword.trim()) return false;
-  if (userObj.password) {
-    if (userObj.password === enteredPassword) return true;
-    if (enteredPassword === 'password123' || enteredPassword === 'comsats123') return true;
-    return false;
-  }
-  return enteredPassword.length >= 4;
-};
-
 const STORAGE_KEYS = {
   CURRENT_USER: 'cui_portal_user',
   STUDENTS: 'cui_portal_students',
@@ -97,6 +92,24 @@ const STORAGE_KEYS = {
   TEMPLATES: 'cui_portal_templates',
   CAMPUS: 'cui_portal_campus',
 };
+
+const readJson = (key, fallback) => {
+  try {
+    const saved = localStorage.getItem(key);
+    if (!saved) return fallback;
+    return JSON.parse(saved);
+  } catch {
+    return fallback;
+  }
+};
+
+const asArray = (value, fallback) => {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object') return [{ ...value, campusId: value.campusId || 'isb' }];
+  return fallback;
+};
+
+const withCampus = (item, campusId = 'isb') => ({ ...item, campusId: item.campusId || campusId });
 
 export const downloadTemplateFile = (tpl) => {
   if (!tpl) return;
@@ -116,115 +129,132 @@ export const downloadTemplateFile = (tpl) => {
 };
 
 export const PortalProvider = ({ children }) => {
-  // Current Campus
-  const [selectedCampus, setSelectedCampus] = useState(() => {
-    return localStorage.getItem(STORAGE_KEYS.CAMPUS) || 'isb';
-  });
+  const persistReady = useRef(false);
+  const resetTokensRef = useRef({});
 
-  // Supervisors List
+  const [selectedCampus, setSelectedCampus] = useState(() => localStorage.getItem(STORAGE_KEYS.CAMPUS) || 'isb');
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
   const [supervisors, setSupervisors] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.SUPERVISORS);
-    return saved ? JSON.parse(saved) : INITIAL_SUPERVISORS;
+    const saved = asArray(readJson(STORAGE_KEYS.SUPERVISORS, null), INITIAL_SUPERVISORS);
+    return saved.map((item) => withCampus(item));
   });
 
-  // Students List
   const [students, setStudents] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.STUDENTS);
+    const saved = readJson(STORAGE_KEYS.STUDENTS, null);
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        const hasLegacyDocs = Array.isArray(parsed) && parsed.some(s =>
-          s.documents && s.documents.some(d => ['tpl-1', 'tpl-2', 'tpl-3', 'tpl-4'].includes(d.templateId))
-        );
-        if (hasLegacyDocs) {
-          localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(INITIAL_STUDENTS));
-          return INITIAL_STUDENTS;
-        }
-        return parsed;
-      } catch {
-        return INITIAL_STUDENTS;
-      }
+      const hasLegacyDocs = Array.isArray(saved) && saved.some((s) =>
+        s.documents && s.documents.some((d) => ['tpl-1', 'tpl-2', 'tpl-3', 'tpl-4'].includes(d.templateId))
+      );
+      if (hasLegacyDocs) return INITIAL_STUDENTS;
+      return (Array.isArray(saved) ? saved : INITIAL_STUDENTS).map((item) => withCampus({
+        ...item,
+        notifications: item.notifications || [],
+      }));
     }
     return INITIAL_STUDENTS;
   });
 
-  // Official Document Templates
   const [templates, setTemplates] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.TEMPLATES);
+    const saved = readJson(STORAGE_KEYS.TEMPLATES, null);
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        const hasLegacyDefaults = Array.isArray(parsed) && parsed.some(t => ['tpl-1', 'tpl-2', 'tpl-3', 'tpl-4'].includes(t.id));
-        if (hasLegacyDefaults) {
-          localStorage.removeItem(STORAGE_KEYS.TEMPLATES);
-          return [];
-        }
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
+      const hasLegacyDefaults = Array.isArray(saved) && saved.some((t) => ['tpl-1', 'tpl-2', 'tpl-3', 'tpl-4'].includes(t.id));
+      if (hasLegacyDefaults) {
+        localStorage.removeItem(STORAGE_KEYS.TEMPLATES);
         return [];
       }
+      return (Array.isArray(saved) ? saved : []).map((item) => withCampus(item));
     }
     return OFFICIAL_TEMPLATES;
   });
 
-  // Incharge & HOD persistent state
-  const [inchargeUser, setInchargeUser] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.INCHARGE);
-    if (saved) {
-      try { return JSON.parse(saved); } catch { return INITIAL_INCHARGE; }
-    }
-    return INITIAL_INCHARGE;
-  });
+  const [inchargeUsers, setInchargeUsers] = useState(() =>
+    asArray(readJson(STORAGE_KEYS.INCHARGE, null), INITIAL_INCHARGES).map((item) => withCampus({ ...item, role: 'incharge' }))
+  );
 
-  const [hodUser, setHodUser] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.HOD);
-    if (saved) {
-      try { return JSON.parse(saved); } catch { return INITIAL_HOD; }
-    }
-    return INITIAL_HOD;
-  });
+  const [hodUsers, setHodUsers] = useState(() =>
+    asArray(readJson(STORAGE_KEYS.HOD, null), INITIAL_HODS).map((item) => withCampus({ ...item, role: 'hod' }))
+  );
 
-  // Active User
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return {
-      ...INITIAL_STUDENTS[0],
-      role: 'student',
-    };
+    const saved = readJson(STORAGE_KEYS.CURRENT_USER, null);
+    if (saved) return withCampus({ ...saved, notifications: saved.notifications || [] });
+    return { ...INITIAL_STUDENTS[0], role: 'student' };
   });
 
-  // Global filters
-  const [submissionFilter, setSubmissionFilter] = useState('all'); // 'all', status filters, or 'supervisor_endorsed'
+  const [submissionFilter, setSubmissionFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSupervisorFilter, setSelectedSupervisorFilter] = useState('all');
-
-  // Modal states
-  const [signatureModalConfig, setSignatureModalConfig] = useState(null); // { studentId, docId, role, onSigned }
-  const [viewingDocument, setViewingDocument] = useState(null); // { student, doc, template }
+  const [signatureModalConfig, setSignatureModalConfig] = useState(null);
+  const [viewingDocument, setViewingDocument] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Sync to local storage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [hydratedStudents, hydratedSupervisors, hydratedIncharge, hydratedHod, hydratedTemplates, hydratedCurrent] = await Promise.all([
+        hydrateStudents(students),
+        hydrateUsers(supervisors),
+        hydrateUsers(inchargeUsers),
+        hydrateUsers(hodUsers),
+        hydrateTemplates(templates),
+        hydrateUsers([currentUser]),
+      ]);
+
+      const hashedStudents = await Promise.all(hydratedStudents.map(ensureHashedPassword));
+      const hashedSupervisors = await Promise.all(hydratedSupervisors.map(ensureHashedPassword));
+      const hashedIncharge = await Promise.all(hydratedIncharge.map(ensureHashedPassword));
+      const hashedHod = await Promise.all(hydratedHod.map(ensureHashedPassword));
+      const hashedCurrent = await ensureHashedPassword(hydratedCurrent[0]);
+
+      if (cancelled) return;
+      setStudents(hashedStudents);
+      setSupervisors(hashedSupervisors);
+      setInchargeUsers(hashedIncharge);
+      setHodUsers(hashedHod);
+      setTemplates(hydratedTemplates);
+      setCurrentUser(hashedCurrent);
+      persistReady.current = true;
+    })();
+    return () => { cancelled = true; };
+    // Boot hydrate once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!persistReady.current) return;
+    persistStudents(students).then((light) => localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(light)));
   }, [students]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SUPERVISORS, JSON.stringify(supervisors));
+    if (!persistReady.current) return;
+    persistUsers(supervisors).then((light) => localStorage.setItem(STORAGE_KEYS.SUPERVISORS, JSON.stringify(light)));
   }, [supervisors]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.INCHARGE, JSON.stringify(inchargeUser));
-  }, [inchargeUser]);
+    if (!persistReady.current) return;
+    persistUsers(inchargeUsers).then((light) => localStorage.setItem(STORAGE_KEYS.INCHARGE, JSON.stringify(light)));
+  }, [inchargeUsers]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.HOD, JSON.stringify(hodUser));
-  }, [hodUser]);
+    if (!persistReady.current) return;
+    persistUsers(hodUsers).then((light) => localStorage.setItem(STORAGE_KEYS.HOD, JSON.stringify(light)));
+  }, [hodUsers]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(templates));
+    if (!persistReady.current) return;
+    persistTemplates(templates).then((light) => localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(light)));
   }, [templates]);
 
   useEffect(() => {
@@ -232,7 +262,8 @@ export const PortalProvider = ({ children }) => {
   }, [selectedCampus]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser));
+    if (!persistReady.current || !currentUser) return;
+    persistUsers([currentUser]).then((light) => localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(light[0])));
   }, [currentUser]);
 
   const showToast = (message, type = 'success') => {
@@ -240,11 +271,43 @@ export const PortalProvider = ({ children }) => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
+  const viewCampus = currentUser?.role === 'student'
+    ? (currentUser.campusId || selectedCampus)
+    : selectedCampus;
+
+  const campusStudents = useMemo(
+    () => students.filter((s) => (s.campusId || 'isb') === viewCampus),
+    [students, viewCampus]
+  );
+  const campusSupervisors = useMemo(
+    () => supervisors.filter((s) => (s.campusId || 'isb') === viewCampus),
+    [supervisors, viewCampus]
+  );
+  const campusTemplates = useMemo(
+    () => templates.filter((t) => (t.campusId || 'isb') === viewCampus),
+    [templates, viewCampus]
+  );
+  const campusIncharges = useMemo(
+    () => inchargeUsers.filter((u) => (u.campusId || 'isb') === viewCampus),
+    [inchargeUsers, viewCampus]
+  );
+  const campusHods = useMemo(
+    () => hodUsers.filter((u) => (u.campusId || 'isb') === viewCampus),
+    [hodUsers, viewCampus]
+  );
+
+  const inchargeUser = currentUser?.role === 'incharge'
+    ? currentUser
+    : (campusIncharges[0] || inchargeUsers[0] || null);
+  const hodUser = currentUser?.role === 'hod'
+    ? currentUser
+    : (campusHods[0] || hodUsers[0] || null);
+
   const isStudentFullyCleared = (student) => {
     const docs = Array.isArray(student?.documents) ? student.documents : [];
     if (docs.length === 0) return false;
 
-    const requiredTemplateIds = (templates || []).map((tpl) => tpl.id).filter(Boolean);
+    const requiredTemplateIds = campusTemplates.map((tpl) => tpl.id).filter(Boolean);
     if (requiredTemplateIds.length > 0) {
       const submittedTemplateIds = new Set(
         docs.filter((doc) => doc?.templateId && requiredTemplateIds.includes(doc.templateId)).map((doc) => doc.templateId)
@@ -257,51 +320,93 @@ export const PortalProvider = ({ children }) => {
     return docs.every((doc) => doc.studentSigned && doc.supervisorSigned && doc.inchargeSigned && doc.hodSigned);
   };
 
-  const getStudentOverallStatus = (documents = []) => {
+  const getStudentOverallStatus = (documents = [], campusId = viewCampus) => {
     if (!Array.isArray(documents) || documents.length === 0) return 'pending_submission';
 
-    const requiredTemplateIds = (templates || []).map((tpl) => tpl.id).filter(Boolean);
+    const requiredTemplateIds = templates
+      .filter((tpl) => (tpl.campusId || 'isb') === (campusId || viewCampus))
+      .map((tpl) => tpl.id)
+      .filter(Boolean);
     const allRequiredTemplatesSubmitted = requiredTemplateIds.length === 0 || requiredTemplateIds.every((templateId) =>
       documents.some((doc) => doc.templateId === templateId)
     );
 
-    const allDocsCompleted = documents.every(doc =>
+    const allDocsCompleted = documents.every((doc) =>
       doc.studentSigned && doc.supervisorSigned && doc.inchargeSigned && doc.hodSigned
     );
     if (allDocsCompleted && allRequiredTemplatesSubmitted) return 'completed';
 
-    if (documents.some(doc => doc.studentSigned && !doc.supervisorSigned)) return 'pending_supervisor';
-    if (documents.some(doc => doc.supervisorSigned && !doc.inchargeSigned)) return 'pending_incharge';
-    if (documents.some(doc => doc.inchargeSigned && !doc.hodSigned)) return 'pending_hod';
+    if (documents.some((doc) => doc.studentSigned && !doc.supervisorSigned)) return 'pending_supervisor';
+    if (documents.some((doc) => doc.supervisorSigned && !doc.inchargeSigned)) return 'pending_incharge';
+    if (documents.some((doc) => doc.inchargeSigned && !doc.hodSigned)) return 'pending_hod';
 
     return 'pending_submission';
   };
 
-  // Quick switch role helper (Student, Supervisor, Incharge, HOD)
   const switchRole = (role, id = null) => {
     if (role === 'student') {
-      const std = id ? students.find(s => s.id === id) : students[0];
+      const std = id ? students.find((s) => s.id === id) : (campusStudents[0] || students[0]);
       if (std) {
+        setSelectedCampus(std.campusId || selectedCampus);
         setCurrentUser({ ...std, role: 'student' });
         showToast(`Switched view to Student: ${std.name} (${std.regNo})`, 'info');
       }
     } else if (role === 'supervisor') {
-      const sup = id ? supervisors.find(s => s.id === id) : supervisors[0];
+      const sup = id ? supervisors.find((s) => s.id === id) : (campusSupervisors[0] || supervisors[0]);
       if (sup) {
+        setSelectedCampus(sup.campusId || selectedCampus);
         setCurrentUser({ ...sup, role: 'supervisor' });
         showToast(`Switched view to Faculty Supervisor: ${sup.name} (${sup.regNo})`, 'info');
+      } else {
+        showToast('No faculty supervisor exists for this campus yet.', 'error');
       }
     } else if (role === 'incharge') {
-      setCurrentUser({ ...inchargeUser, role: 'incharge' });
-      showToast(`Switched view to Internship Incharge: ${inchargeUser.name}`, 'info');
+      const inc = id ? inchargeUsers.find((s) => s.id === id) : (campusIncharges[0] || inchargeUsers[0]);
+      if (inc) {
+        setSelectedCampus(inc.campusId || selectedCampus);
+        setCurrentUser({ ...inc, role: 'incharge' });
+        showToast(`Switched view to Internship Incharge: ${inc.name}`, 'info');
+      } else {
+        showToast('No internship incharge exists for this campus yet.', 'error');
+      }
     } else if (role === 'hod') {
-      setCurrentUser({ ...hodUser, role: 'hod' });
-      showToast(`Switched view to Head of Department (HOD): ${hodUser.name}`, 'info');
+      const hod = id ? hodUsers.find((s) => s.id === id) : (campusHods[0] || hodUsers[0]);
+      if (hod) {
+        setSelectedCampus(hod.campusId || selectedCampus);
+        setCurrentUser({ ...hod, role: 'hod' });
+        showToast(`Switched view to Head of Department (HOD): ${hod.name}`, 'info');
+      } else {
+        showToast('No HOD exists for this campus yet.', 'error');
+      }
     }
   };
 
-  // Comprehensive Login handler with primary role check & cross-role auto-detection
-  const login = (identifier, password, role) => {
+  const findAccount = (identifier) => {
+    const cleanId = identifier.trim();
+    const foundStudent = students.find((s) => isUserMatch(s, cleanId));
+    if (foundStudent) return { user: foundStudent, role: 'student' };
+    const foundSupervisor = supervisors.find((s) => isUserMatch(s, cleanId));
+    if (foundSupervisor) return { user: foundSupervisor, role: 'supervisor' };
+    const foundIncharge = inchargeUsers.find((s) => isUserMatch(s, cleanId));
+    if (foundIncharge) return { user: foundIncharge, role: 'incharge' };
+    const foundHod = hodUsers.find((s) => isUserMatch(s, cleanId));
+    if (foundHod) return { user: foundHod, role: 'hod' };
+    return null;
+  };
+
+  const persistPasswordOnUser = (match, hashed) => {
+    if (match.role === 'student') {
+      setStudents((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, password: hashed } : s)));
+    } else if (match.role === 'supervisor') {
+      setSupervisors((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, password: hashed } : s)));
+    } else if (match.role === 'incharge') {
+      setInchargeUsers((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, password: hashed } : s)));
+    } else if (match.role === 'hod') {
+      setHodUsers((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, password: hashed } : s)));
+    }
+  };
+
+  const login = async (identifier, password, role) => {
     if (!password || !password.trim()) {
       return { success: false, error: 'Please enter your password.' };
     }
@@ -310,70 +415,35 @@ export const PortalProvider = ({ children }) => {
     }
 
     const cleanId = identifier.trim();
-
-    // 1. Check selected role primary candidates
-    let matchObj = null;
-    let actualRole = role;
+    let match = null;
 
     if (role === 'student') {
-      const match = students.find(s => isUserMatch(s, cleanId));
-      if (match) { matchObj = match; actualRole = 'student'; }
+      const user = students.find((s) => isUserMatch(s, cleanId));
+      if (user) match = { user, role: 'student' };
     } else if (role === 'supervisor') {
-      const match = supervisors.find(s => isUserMatch(s, cleanId));
-      if (match) { matchObj = match; actualRole = 'supervisor'; }
+      const user = supervisors.find((s) => isUserMatch(s, cleanId));
+      if (user) match = { user, role: 'supervisor' };
     } else if (role === 'incharge') {
-      if (isUserMatch(inchargeUser, cleanId)) { matchObj = inchargeUser; actualRole = 'incharge'; }
+      const user = inchargeUsers.find((s) => isUserMatch(s, cleanId));
+      if (user) match = { user, role: 'incharge' };
     } else if (role === 'hod') {
-      if (isUserMatch(hodUser, cleanId)) { matchObj = hodUser; actualRole = 'hod'; }
+      const user = hodUsers.find((s) => isUserMatch(s, cleanId));
+      if (user) match = { user, role: 'hod' };
     }
 
-    // 2. Cross-role auto-detection if not found under selected role tab
-    if (!matchObj) {
-      const foundInStudents = students.find(s => isUserMatch(s, cleanId));
-      if (foundInStudents) {
-        matchObj = foundInStudents;
-        actualRole = 'student';
-      } else {
-        const foundInSupervisors = supervisors.find(s => isUserMatch(s, cleanId));
-        if (foundInSupervisors) {
-          matchObj = foundInSupervisors;
-          actualRole = 'supervisor';
-        } else if (isUserMatch(inchargeUser, cleanId)) {
-          matchObj = inchargeUser;
-          actualRole = 'incharge';
-        } else if (isUserMatch(hodUser, cleanId)) {
-          matchObj = hodUser;
-          actualRole = 'hod';
-        }
-      }
-    }
-
-    if (!matchObj) {
+    if (!match) match = findAccount(cleanId);
+    if (!match) {
       return { success: false, error: `No registered account found for "${identifier}". Please check your email/ID.` };
     }
 
-    // 3. Verify Password
-    if (!verifyPassword(matchObj, password)) {
+    const valid = await verifyPasswordHash(password, match.user.password);
+    if (!valid) {
       return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
     }
 
-    // Ensure account password is stored if it was uninitialized
-    if (!matchObj.password) {
-      matchObj = { ...matchObj, password: password.trim() };
-      if (actualRole === 'student') {
-        setStudents(prev => prev.map(s => s.id === matchObj.id ? { ...s, password: password.trim() } : s));
-      } else if (actualRole === 'supervisor') {
-        setSupervisors(prev => prev.map(s => s.id === matchObj.id ? { ...s, password: password.trim() } : s));
-      } else if (actualRole === 'incharge') {
-        setInchargeUser(prev => ({ ...prev, password: password.trim() }));
-      } else if (actualRole === 'hod') {
-        setHodUser(prev => ({ ...prev, password: password.trim() }));
-      }
-    }
-
-    const updatedUser = { ...matchObj, role: actualRole };
+    const updatedUser = { ...match.user, role: match.role };
+    setSelectedCampus(updatedUser.campusId || selectedCampus);
     setCurrentUser(updatedUser);
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedUser));
 
     const roleTitles = {
       student: 'Student',
@@ -381,28 +451,32 @@ export const PortalProvider = ({ children }) => {
       incharge: 'Internship Incharge',
       hod: 'Head of Department (HOD)',
     };
-    showToast(`Welcome back, ${matchObj.name}! Logged in as ${roleTitles[actualRole]}.`);
+    showToast(`Welcome back, ${match.user.name}! Logged in as ${roleTitles[match.role]}.`);
     return { success: true };
   };
 
-  // Register / Sign up new user
-  const signup = (userData) => {
+  const signup = async (userData) => {
     const rawInput = userData.regNo.trim();
     const isStudent = userData.role === 'student';
+    const campusId = userData.campusId || selectedCampus;
 
     let cleanRegNo = rawInput.toUpperCase();
     let officialEmail = '';
 
     if (isStudent) {
       officialEmail = `${rawInput.toLowerCase()}@isbstudents.comsats.edu.pk`;
+    } else if (rawInput.includes('@')) {
+      officialEmail = rawInput.toLowerCase();
+      cleanRegNo = rawInput.split('@')[0].toUpperCase();
     } else {
-      if (rawInput.includes('@')) {
-        officialEmail = rawInput.toLowerCase();
-        cleanRegNo = rawInput.split('@')[0].toUpperCase();
-      } else {
-        officialEmail = `${rawInput.toLowerCase()}@isbfaculty.comsats.edu.pk`;
-      }
+      officialEmail = `${rawInput.toLowerCase()}@isbfaculty.comsats.edu.pk`;
     }
+
+    if (findAccount(officialEmail) || findAccount(cleanRegNo)) {
+      return { success: false, error: 'An account with this registration number or email already exists.' };
+    }
+
+    const hashed = await hashPassword(userData.password);
 
     if (userData.role === 'student') {
       const newStudent = {
@@ -410,7 +484,8 @@ export const PortalProvider = ({ children }) => {
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
-        password: userData.password,
+        password: hashed,
+        campusId,
         program: userData.program || null,
         semester: userData.semester || null,
         cgpa: null,
@@ -426,20 +501,23 @@ export const PortalProvider = ({ children }) => {
         status: 'pending_submission',
         avatar: null,
         documents: [],
+        notifications: [],
         needsProfileCompletion: true,
       };
-      setStudents(prev => [newStudent, ...prev]);
+      setStudents((prev) => [newStudent, ...prev]);
       setCurrentUser({ ...newStudent, role: 'student' });
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify({ ...newStudent, role: 'student' }));
       showToast(`Account created for ${newStudent.name}! Welcome to CUOnline.`);
       return { success: true };
-    } else if (userData.role === 'supervisor') {
+    }
+
+    if (userData.role === 'supervisor') {
       const newSupervisor = {
         id: `sup-${Date.now()}`,
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
-        password: userData.password,
+        password: hashed,
+        campusId,
         designation: null,
         department: null,
         office: null,
@@ -448,18 +526,20 @@ export const PortalProvider = ({ children }) => {
         avatar: null,
         needsProfileCompletion: true,
       };
-      setSupervisors(prev => [...prev, newSupervisor]);
+      setSupervisors((prev) => [...prev, newSupervisor]);
       setCurrentUser({ ...newSupervisor, role: 'supervisor' });
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify({ ...newSupervisor, role: 'supervisor' }));
       showToast(`Faculty account registered for ${newSupervisor.name}.`);
       return { success: true };
-    } else if (userData.role === 'incharge') {
+    }
+
+    if (userData.role === 'incharge') {
       const newIncharge = {
         id: `inc-${Date.now()}`,
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
-        password: userData.password,
+        password: hashed,
+        campusId,
         designation: 'Convener & Internship Incharge',
         department: 'Department of Computer Science',
         office: 'Placement & Internship Cell, Student Service Centre',
@@ -468,19 +548,20 @@ export const PortalProvider = ({ children }) => {
         role: 'incharge',
         avatar: null,
       };
-      setInchargeUser(newIncharge);
+      setInchargeUsers((prev) => [...prev, newIncharge]);
       setCurrentUser(newIncharge);
-      localStorage.setItem(STORAGE_KEYS.INCHARGE, JSON.stringify(newIncharge));
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(newIncharge));
       showToast(`Internship Incharge account registered for ${newIncharge.name}.`);
       return { success: true };
-    } else if (userData.role === 'hod') {
+    }
+
+    if (userData.role === 'hod') {
       const newHod = {
         id: `hod-${Date.now()}`,
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
-        password: userData.password,
+        password: hashed,
+        campusId,
         designation: 'Head of Department / Chairperson',
         department: 'Department of Computer Science',
         office: 'HoD Secretariat, 3rd Floor, Faculty Block',
@@ -489,42 +570,20 @@ export const PortalProvider = ({ children }) => {
         role: 'hod',
         avatar: null,
       };
-      setHodUser(newHod);
+      setHodUsers((prev) => [...prev, newHod]);
       setCurrentUser(newHod);
-      localStorage.setItem(STORAGE_KEYS.HOD, JSON.stringify(newHod));
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(newHod));
       showToast(`HOD account registered for ${newHod.name}.`);
       return { success: true };
     }
+
+    return { success: false, error: 'Unknown role.' };
   };
 
-  // Find user by account email
   const findUserByEmail = (email) => {
     if (!email) return null;
-    const clean = email.trim();
-
-    // Check students
-    const std = students.find(s => isUserMatch(s, clean));
-    if (std) return { user: std, role: 'student' };
-
-    // Check supervisors
-    const sup = supervisors.find(s => isUserMatch(s, clean));
-    if (sup) return { user: sup, role: 'supervisor' };
-
-    // Check incharge
-    if (isUserMatch(inchargeUser, clean)) {
-      return { user: inchargeUser, role: 'incharge' };
-    }
-
-    // Check HOD
-    if (isUserMatch(hodUser, clean)) {
-      return { user: hodUser, role: 'hod' };
-    }
-
-    return null;
+    return findAccount(email);
   };
 
-  // Request password reset link by account email
   const requestPasswordReset = (email) => {
     if (!email || !email.trim()) {
       return { success: false, error: 'Please enter your account email.' };
@@ -538,25 +597,38 @@ export const PortalProvider = ({ children }) => {
       };
     }
 
-    const resetToken = `rst-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
-    const accountEmail = match.user.email || email.trim().toLowerCase();
-    const resetLink = `https://cuonline.comsats.edu.pk/auth/reset-password?token=${resetToken}&email=${encodeURIComponent(accountEmail)}`;
+    const resetToken = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const resetTokenExpires = Date.now() + 30 * 60 * 1000;
+    const patch = { resetToken, resetTokenExpires };
+    resetTokensRef.current[match.user.id] = patch;
+
+    if (match.role === 'student') {
+      setStudents((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...patch } : s)));
+    } else if (match.role === 'supervisor') {
+      setSupervisors((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...patch } : s)));
+    } else if (match.role === 'incharge') {
+      setInchargeUsers((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...patch } : s)));
+    } else if (match.role === 'hod') {
+      setHodUsers((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...patch } : s)));
+    }
 
     return {
       success: true,
       user: match.user,
       role: match.role,
-      email: accountEmail,
+      email: match.user.email || email.trim().toLowerCase(),
       resetToken,
-      resetLink,
-      message: `Reset link generated for ${match.user.name} (${accountEmail}).`
+      expiresAt: resetTokenExpires,
+      message: `Reset token generated for ${match.user.name}. Valid for 30 minutes.`,
     };
   };
 
-  // Reset password and save new password
-  const resetPassword = (email, newPassword) => {
+  const resetPassword = async (email, newPassword, token) => {
     if (!newPassword || newPassword.length < 4) {
       return { success: false, error: 'Password must be at least 4 characters long.' };
+    }
+    if (!token || !token.trim()) {
+      return { success: false, error: 'Reset token is required.' };
     }
 
     const match = findUserByEmail(email);
@@ -564,36 +636,37 @@ export const PortalProvider = ({ children }) => {
       return { success: false, error: 'Account not found. Cannot reset password.' };
     }
 
-    const cleanEmail = email.trim();
-
-    if (match.role === 'student') {
-      setStudents(prev => prev.map(s => {
-        const isMatch = isUserMatch(s, cleanEmail) || s.id === match.user.id;
-        return isMatch ? { ...s, password: newPassword } : s;
-      }));
-    } else if (match.role === 'supervisor') {
-      setSupervisors(prev => prev.map(s => {
-        const isMatch = isUserMatch(s, cleanEmail) || s.id === match.user.id;
-        return isMatch ? { ...s, password: newPassword } : s;
-      }));
-    } else if (match.role === 'incharge') {
-      setInchargeUser(prev => ({ ...prev, password: newPassword }));
-    } else if (match.role === 'hod') {
-      setHodUser(prev => ({ ...prev, password: newPassword }));
+    const storedToken = resetTokensRef.current[match.user.id] || {
+      resetToken: match.user.resetToken,
+      resetTokenExpires: match.user.resetTokenExpires,
+    };
+    const tokenOk = storedToken.resetToken === token.trim() && storedToken.resetTokenExpires > Date.now();
+    if (!tokenOk) {
+      return { success: false, error: 'Invalid or expired reset token. Request a new one.' };
     }
 
-    // If current user is this user, update password in currentUser too
-    if (currentUser?.id === match.user.id || (currentUser?.email && isUserMatch(currentUser, cleanEmail))) {
-      const updated = { ...currentUser, password: newPassword };
-      setCurrentUser(updated);
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updated));
+    const hashed = await hashPassword(newPassword);
+    delete resetTokensRef.current[match.user.id];
+    const cleared = { password: hashed, resetToken: null, resetTokenExpires: null };
+
+    if (match.role === 'student') {
+      setStudents((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...cleared } : s)));
+    } else if (match.role === 'supervisor') {
+      setSupervisors((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...cleared } : s)));
+    } else if (match.role === 'incharge') {
+      setInchargeUsers((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...cleared } : s)));
+    } else if (match.role === 'hod') {
+      setHodUsers((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...cleared } : s)));
+    }
+
+    if (currentUser?.id === match.user.id) {
+      setCurrentUser((prev) => ({ ...prev, ...cleared }));
     }
 
     showToast(`Password successfully reset for ${match.user.name}! You can now sign in with your new password.`);
     return { success: true, user: match.user, role: match.role };
   };
 
-  // Update user profile information
   const updateUserProfile = (updatedFields) => {
     if (!currentUser) return;
 
@@ -607,58 +680,50 @@ export const PortalProvider = ({ children }) => {
       needsProfileCompletion: false,
     };
     setCurrentUser(updated);
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updated));
 
     if (currentUser.role === 'student') {
-      setStudents(prev => prev.map(std => std.id === currentUser.id ? { ...std, ...sanitizedFields, needsProfileCompletion: false } : std));
+      setStudents((prev) => prev.map((std) => std.id === currentUser.id ? { ...std, ...sanitizedFields, needsProfileCompletion: false } : std));
     } else if (currentUser.role === 'supervisor') {
-      setSupervisors(prev => prev.map(sup => sup.id === currentUser.id ? { ...sup, ...sanitizedFields, needsProfileCompletion: false } : sup));
+      setSupervisors((prev) => prev.map((sup) => sup.id === currentUser.id ? { ...sup, ...sanitizedFields, needsProfileCompletion: false } : sup));
     } else if (currentUser.role === 'incharge') {
-      setInchargeUser(prev => ({ ...prev, ...sanitizedFields, needsProfileCompletion: false }));
+      setInchargeUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, ...sanitizedFields, needsProfileCompletion: false } : u));
     } else if (currentUser.role === 'hod') {
-      setHodUser(prev => ({ ...prev, ...sanitizedFields, needsProfileCompletion: false }));
+      setHodUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, ...sanitizedFields, needsProfileCompletion: false } : u));
     }
     showToast('Official profile details updated successfully!');
   };
 
-  // Update user avatar (photo upload)
   const updateUserAvatar = (newAvatarUrl) => {
     if (!currentUser) return;
-    setCurrentUser(prev => ({ ...prev, avatar: newAvatarUrl }));
+    setCurrentUser((prev) => ({ ...prev, avatar: newAvatarUrl }));
     if (currentUser.role === 'student') {
-      setStudents(prev => prev.map(std => std.id === currentUser.id ? { ...std, avatar: newAvatarUrl } : std));
+      setStudents((prev) => prev.map((std) => std.id === currentUser.id ? { ...std, avatar: newAvatarUrl } : std));
     } else if (currentUser.role === 'supervisor') {
-      setSupervisors(prev => prev.map(sup => sup.id === currentUser.id ? { ...sup, avatar: newAvatarUrl } : sup));
+      setSupervisors((prev) => prev.map((sup) => sup.id === currentUser.id ? { ...sup, avatar: newAvatarUrl } : sup));
     } else if (currentUser.role === 'incharge') {
-      setInchargeUser(prev => ({ ...prev, avatar: newAvatarUrl }));
+      setInchargeUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, avatar: newAvatarUrl } : u));
     } else if (currentUser.role === 'hod') {
-      setHodUser(prev => ({ ...prev, avatar: newAvatarUrl }));
+      setHodUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, avatar: newAvatarUrl } : u));
     }
     showToast('Profile photo updated successfully!');
   };
 
-  // Assign Supervisor to a student (Incharge feature)
   const assignSupervisor = (studentId, supervisorId) => {
-    setStudents(prev => prev.map(std => {
+    setStudents((prev) => prev.map((std) => {
       if (std.id === studentId) {
-        return {
-          ...std,
-          assignedSupervisorId: supervisorId,
-        };
+        return { ...std, assignedSupervisorId: supervisorId };
       }
       return std;
     }));
 
-    // If current logged-in user is this student, sync currentUser state too
     if (currentUser?.id === studentId) {
-      setCurrentUser(prev => ({ ...prev, assignedSupervisorId: supervisorId }));
+      setCurrentUser((prev) => ({ ...prev, assignedSupervisorId: supervisorId }));
     }
 
-    const supObj = supervisors.find(s => s.id === supervisorId);
+    const supObj = supervisors.find((s) => s.id === supervisorId);
     showToast(`Assigned supervisor ${supObj ? supObj.name : 'None'} to student.`);
   };
 
-  // Student uploads a document for a template
   const uploadStudentDocument = (studentId, { templateId, title, fileName, fileSize = '450 KB', studentSignatureDataUrl, fileDataUrl = null }) => {
     const newDocId = `doc-${studentId}-${Date.now()}`;
     const newDoc = {
@@ -684,25 +749,25 @@ export const PortalProvider = ({ children }) => {
       feedback: 'Document submitted by student with digital canvas signature.'
     };
 
-    setStudents(prev => prev.map(std => {
+    setStudents((prev) => prev.map((std) => {
       if (std.id === studentId) {
         const updatedDocs = [...(std.documents || []), newDoc];
         return {
           ...std,
           documents: updatedDocs,
-          status: getStudentOverallStatus(updatedDocs)
+          status: getStudentOverallStatus(updatedDocs, std.campusId)
         };
       }
       return std;
     }));
 
     if (currentUser?.id === studentId) {
-      setCurrentUser(prev => {
+      setCurrentUser((prev) => {
         const updatedDocs = [...(prev.documents || []), newDoc];
         return {
           ...prev,
           documents: updatedDocs,
-          status: getStudentOverallStatus(updatedDocs)
+          status: getStudentOverallStatus(updatedDocs, prev.campusId)
         };
       });
     }
@@ -710,9 +775,8 @@ export const PortalProvider = ({ children }) => {
     showToast('Internship document uploaded & signed successfully! Forwarded to Faculty Supervisor.');
   };
 
-  // Student deletes a submitted document from their submission history
-  const deleteStudentDocument = (studentId, docId) => {
-    const removed = (students.find(std => std.id === studentId)?.documents || []).find(doc => doc.id === docId);
+  const deleteStudentDocument = async (studentId, docId) => {
+    const removed = (students.find((std) => std.id === studentId)?.documents || []).find((doc) => doc.id === docId);
     if (!removed) return;
 
     if (removed.inchargeSigned || removed.hodSigned) {
@@ -720,24 +784,25 @@ export const PortalProvider = ({ children }) => {
       return;
     }
 
-    setStudents(prev => prev.map(std => {
-      if (std.id !== studentId) return std;
+    await deleteDocumentBlobs(removed);
 
-      const updatedDocs = (std.documents || []).filter(doc => doc.id !== docId);
+    setStudents((prev) => prev.map((std) => {
+      if (std.id !== studentId) return std;
+      const updatedDocs = (std.documents || []).filter((doc) => doc.id !== docId);
       return {
         ...std,
         documents: updatedDocs,
-        status: getStudentOverallStatus(updatedDocs),
+        status: getStudentOverallStatus(updatedDocs, std.campusId),
       };
     }));
 
     if (currentUser?.id === studentId) {
-      setCurrentUser(prev => {
-        const updatedDocs = (prev.documents || []).filter(doc => doc.id !== docId);
+      setCurrentUser((prev) => {
+        const updatedDocs = (prev.documents || []).filter((doc) => doc.id !== docId);
         return {
           ...prev,
           documents: updatedDocs,
-          status: getStudentOverallStatus(updatedDocs),
+          status: getStudentOverallStatus(updatedDocs, prev.campusId),
         };
       });
     }
@@ -745,16 +810,14 @@ export const PortalProvider = ({ children }) => {
     showToast(`Document "${removed.title}" deleted from your submissions.`);
   };
 
-  // Multi-tier signature application
   const signDocument = (studentId, docId, signerRole, signatureDataUrl, note = '') => {
     const now = new Date().toISOString();
 
-    setStudents(prev => prev.map(std => {
+    setStudents((prev) => prev.map((std) => {
       if (std.id !== studentId) return std;
 
-      const updatedDocs = (std.documents || []).map(doc => {
+      const updatedDocs = (std.documents || []).map((doc) => {
         if (doc.id !== docId) return doc;
-
         const updatedDoc = { ...doc };
 
         if (signerRole === 'student') {
@@ -770,11 +833,13 @@ export const PortalProvider = ({ children }) => {
           updatedDoc.inchargeSigned = true;
           updatedDoc.inchargeSignature = signatureDataUrl;
           updatedDoc.inchargeSignedAt = now;
+          updatedDoc.inchargeSignerId = currentUser?.id || null;
           updatedDoc.feedback = note || 'Vetted and stamped by Internship Incharge.';
         } else if (signerRole === 'hod') {
           updatedDoc.hodSigned = true;
           updatedDoc.hodSignature = signatureDataUrl;
           updatedDoc.hodSignedAt = now;
+          updatedDoc.hodSignerId = currentUser?.id || null;
           updatedDoc.feedback = note || 'Departmental approval granted for this document. Remaining internship files must also be completed before 3 credits are awarded.';
         }
 
@@ -783,15 +848,14 @@ export const PortalProvider = ({ children }) => {
 
       return {
         ...std,
-        status: getStudentOverallStatus(updatedDocs),
+        status: getStudentOverallStatus(updatedDocs, std.campusId),
         documents: updatedDocs
       };
     }));
 
-    // Update currentUser if applicable
     if (currentUser?.id === studentId) {
-      setCurrentUser(prev => {
-        const updatedDocs = (prev.documents || []).map(doc => {
+      setCurrentUser((prev) => {
+        const updatedDocs = (prev.documents || []).map((doc) => {
           if (doc.id !== docId) return doc;
           return {
             ...doc,
@@ -800,18 +864,18 @@ export const PortalProvider = ({ children }) => {
             [`${signerRole}SignedAt`]: now,
           };
         });
-        return { ...prev, documents: updatedDocs, status: getStudentOverallStatus(updatedDocs) };
+        return { ...prev, documents: updatedDocs, status: getStudentOverallStatus(updatedDocs, prev.campusId) };
       });
     }
 
     showToast(`Signature endorsed as ${signerRole.toUpperCase()} successfully!`);
   };
 
-  // Incharge / University uploads a new template
   const addTemplate = (templateData) => {
     const newTpl = {
       id: `tpl-${Date.now()}`,
-      code: templateData.code || `CUI-INT-FORM-0${templates.length + 1}`,
+      campusId: currentUser?.campusId || selectedCampus,
+      code: templateData.code || `CUI-INT-FORM-0${campusTemplates.length + 1}`,
       title: templateData.title,
       category: templateData.category || 'General',
       description: templateData.description || 'Official document template issued by the Internship Incharge Office.',
@@ -824,45 +888,73 @@ export const PortalProvider = ({ children }) => {
       uploadedBy: currentUser?.name || 'Internship Incharge Office',
       requiredSignatures: templateData.requiredSignatures || ['student', 'supervisor', 'incharge'],
     };
-    setTemplates(prev => [newTpl, ...prev]);
+    setTemplates((prev) => [newTpl, ...prev]);
     showToast(`New official template "${newTpl.title}" published to portal.`);
   };
 
-  const deleteTemplate = (templateId) => {
-    const removed = templates.find(t => t.id === templateId);
+  const deleteTemplate = async (templateId) => {
+    const removed = templates.find((t) => t.id === templateId);
     if (!removed) return;
-
-    setTemplates(prev => prev.filter(t => t.id !== templateId));
+    await deleteTemplateBlobs(removed);
+    setTemplates((prev) => prev.filter((t) => t.id !== templateId));
     showToast(`Official template "${removed.title}" deleted from the repository.`);
   };
 
-  // Helper to get supervisor object for a student
   const getSupervisorForStudent = (student) => {
     if (!student || !student.assignedSupervisorId) return null;
-    return supervisors.find(s => s.id === student.assignedSupervisorId) || null;
+    return supervisors.find((s) => s.id === student.assignedSupervisorId) || null;
   };
 
   const getStudentLiveStatus = (student) => {
     if (!student) return 'pending_submission';
-    return getStudentOverallStatus(Array.isArray(student.documents) ? student.documents : []);
+    return getStudentOverallStatus(Array.isArray(student.documents) ? student.documents : [], student.campusId);
   };
 
-  // Filtered students list based on search, submissionFilter, supervisorFilter
+  const sendReminder = (studentId, message) => {
+    const student = students.find((s) => s.id === studentId);
+    if (!student) return;
+    const notification = {
+      id: `ntf-${Date.now()}`,
+      fromId: currentUser?.id,
+      fromName: currentUser?.name || 'Faculty Supervisor',
+      fromRole: currentUser?.role || 'supervisor',
+      message: message || `Please submit your internship documents. Reminder from ${currentUser?.name || 'your supervisor'}.`,
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+    setStudents((prev) => prev.map((s) => s.id === studentId
+      ? { ...s, notifications: [notification, ...(s.notifications || [])] }
+      : s));
+    if (currentUser?.id === studentId) {
+      setCurrentUser((prev) => ({ ...prev, notifications: [notification, ...(prev.notifications || [])] }));
+    }
+    showToast(`Reminder delivered to ${student.name} (${student.regNo}).`);
+  };
+
+  const markNotificationsRead = (studentId) => {
+    setStudents((prev) => prev.map((s) => s.id === studentId
+      ? { ...s, notifications: (s.notifications || []).map((n) => ({ ...n, read: true })) }
+      : s));
+    if (currentUser?.id === studentId) {
+      setCurrentUser((prev) => ({
+        ...prev,
+        notifications: (prev.notifications || []).map((n) => ({ ...n, read: true })),
+      }));
+    }
+  };
+
   const getFilteredStudents = (forSupervisorId = null) => {
-    return students.filter(student => {
+    return campusStudents.filter((student) => {
       const liveStatus = getStudentLiveStatus(student);
 
-      // If scoped to a specific supervisor
       if (forSupervisorId && student.assignedSupervisorId !== forSupervisorId) {
         return false;
       }
 
-      // Supervisor filter dropdown
       if (selectedSupervisorFilter !== 'all' && student.assignedSupervisorId !== selectedSupervisorFilter) {
         return false;
       }
 
-      // Submission / Status filter
       if (submissionFilter === 'pending_submission') {
         const hasSubmittedDocs = student.documents && student.documents.length > 0;
         if (hasSubmittedDocs && liveStatus !== 'pending_submission') return false;
@@ -878,7 +970,6 @@ export const PortalProvider = ({ children }) => {
         if (!['pending_incharge', 'pending_hod', 'completed'].includes(liveStatus)) return false;
       }
 
-      // Search query filter (Name, RegNo, Company)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = student.name.toLowerCase().includes(q);
@@ -895,21 +986,17 @@ export const PortalProvider = ({ children }) => {
     });
   };
 
-  // Counts for filter pills
   const stats = {
-    totalStudents: students.length,
-    pendingSubmission: students.filter(s => {
-      const status = getStudentOverallStatus(Array.isArray(s.documents) ? s.documents : []);
+    totalStudents: campusStudents.length,
+    pendingSubmission: campusStudents.filter((s) => {
+      const status = getStudentLiveStatus(s);
       return (!s.documents || s.documents.length === 0) || status === 'pending_submission';
     }).length,
-    pendingSupervisor: students.filter(s => getStudentOverallStatus(Array.isArray(s.documents) ? s.documents : []) === 'pending_supervisor').length,
-    pendingIncharge: students.filter(s => getStudentOverallStatus(Array.isArray(s.documents) ? s.documents : []) === 'pending_incharge').length,
-    pendingHod: students.filter(s => getStudentOverallStatus(Array.isArray(s.documents) ? s.documents : []) === 'pending_hod').length,
-    completed: students.filter(s => isStudentFullyCleared(s)).length,
-    supervisorEndorsed: students.filter(s => {
-      const status = getStudentOverallStatus(Array.isArray(s.documents) ? s.documents : []);
-      return ['pending_incharge', 'pending_hod', 'completed'].includes(status);
-    }).length,
+    pendingSupervisor: campusStudents.filter((s) => getStudentLiveStatus(s) === 'pending_supervisor').length,
+    pendingIncharge: campusStudents.filter((s) => getStudentLiveStatus(s) === 'pending_incharge').length,
+    pendingHod: campusStudents.filter((s) => getStudentLiveStatus(s) === 'pending_hod').length,
+    completed: campusStudents.filter((s) => isStudentFullyCleared(s)).length,
+    supervisorEndorsed: campusStudents.filter((s) => ['pending_incharge', 'pending_hod', 'completed'].includes(getStudentLiveStatus(s))).length,
   };
 
   return (
@@ -920,13 +1007,15 @@ export const PortalProvider = ({ children }) => {
         campuses: CAMPUSES,
         currentUser,
         setCurrentUser,
-        supervisors,
-        students,
-        templates,
+        supervisors: campusSupervisors,
+        students: campusStudents,
+        templates: campusTemplates,
         notices: NOTICES,
         inchargeUser,
         hodUser,
-        // Methods
+        inchargeUsers: campusIncharges,
+        hodUsers: campusHods,
+        isOnline,
         login,
         signup,
         requestPasswordReset,
@@ -944,15 +1033,15 @@ export const PortalProvider = ({ children }) => {
         getSupervisorForStudent,
         getFilteredStudents,
         isStudentFullyCleared,
+        sendReminder,
+        markNotificationsRead,
         stats,
-        // Filter states
         submissionFilter,
         setSubmissionFilter,
         searchQuery,
         setSearchQuery,
         selectedSupervisorFilter,
         setSelectedSupervisorFilter,
-        // Modals & UI
         signatureModalConfig,
         setSignatureModalConfig,
         viewingDocument,

@@ -47,6 +47,7 @@ export default function StudentDashboard({
     updateUserAvatar,
     updateUserProfile,
     showToast,
+    markNotificationsRead,
   } = usePortal();
 
   const avatarInputRef = useRef(null);
@@ -238,6 +239,27 @@ export default function StudentDashboard({
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {(activeTab === 'dashboard' || !activeTab) && (
         <div className="space-y-6">
+          {(currentUser?.notifications || []).some((n) => !n.read) && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-amber-900">Supervisor reminders</p>
+                <ul className="mt-2 space-y-1.5">
+                  {(currentUser.notifications || []).filter((n) => !n.read).map((n) => (
+                    <li key={n.id} className="text-xs text-amber-800">
+                      <span className="font-semibold">{n.fromName}:</span> {n.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <button
+                type="button"
+                onClick={() => markNotificationsRead(currentUser.id)}
+                className="text-xs font-bold text-amber-900 underline shrink-0"
+              >
+                Mark read
+              </button>
+            </div>
+          )}
 
           {/* ── WIDE & PROFESSIONAL STUDENT PROFILE CARD ── */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">

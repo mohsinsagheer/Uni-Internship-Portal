@@ -65,7 +65,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -78,7 +78,7 @@ export default function AuthModal({ isOpen, onClose }) {
       return;
     }
 
-    const result = login(regNo, password, role);
+    const result = await login(regNo, password, role);
     if (result.success) {
       onClose();
     } else {
@@ -91,7 +91,7 @@ export default function AuthModal({ isOpen, onClose }) {
     return match ? Number(match[0]) : null;
   };
 
-  const handleSignupSubmit = (e) => {
+  const handleSignupSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -123,7 +123,7 @@ export default function AuthModal({ isOpen, onClose }) {
       }
     }
 
-    const result = signup({
+    const result = await signup({
       name,
       regNo,
       password: signupPassword,
@@ -131,6 +131,7 @@ export default function AuthModal({ isOpen, onClose }) {
       program,
       internshipCompany: company || null,
       semester: semester || null,
+      campusId: selectedCampus,
     });
 
     if (result.success) {
@@ -159,7 +160,7 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   };
 
-  const handleResetPasswordSubmit = (e) => {
+  const handleResetPasswordSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -174,7 +175,8 @@ export default function AuthModal({ isOpen, onClose }) {
     }
 
     const emailToReset = forgotData?.email || forgotEmail;
-    const result = resetPassword(emailToReset, newPassword);
+    const tokenToUse = forgotData?.resetToken || '';
+    const result = await resetPassword(emailToReset, newPassword, tokenToUse);
     if (result.success) {
       onClose();
     } else {
@@ -556,7 +558,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     Reset Account Password
                   </h4>
                   <p className="text-xs text-slate-500">
-                    Provide your account email to receive a secure link to set a new password.
+                    Provide your account email to generate a 30-minute reset token.
                   </p>
                 </div>
               </div>
@@ -584,28 +586,21 @@ export default function AuthModal({ isOpen, onClose }) {
                     className="w-full py-3 bg-gradient-to-r from-[#002147] via-[#0a3264] to-[#002147] hover:from-[#001738] hover:to-[#06244a] text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border border-[#c29b38]/40 active:scale-[0.99]"
                   >
                     <Send className="w-4 h-4 text-[#facc15]" />
-                    <span>Send Password Reset Link</span>
+                    <span>Generate Reset Token</span>
                   </button>
                 </form>
               ) : (
-                /* Step B: Simulated generated reset link notification */
                 <div className="space-y-4">
                   <div className="p-4 bg-amber-50/80 border border-amber-300 rounded-2xl space-y-2">
                     <div className="flex items-center gap-2 text-amber-900 font-bold text-xs sm:text-sm">
                       <KeyRound className="w-4 h-4 text-[#c29b38]" />
-                      <span>Password Reset Link Dispatched</span>
+                      <span>Reset Token Created</span>
                     </div>
                     <p className="text-xs text-slate-700 leading-relaxed">
-                      A password recovery link has been generated for account holder{' '}
-                      <strong>{forgotData.user?.name}</strong> at{' '}
-                      <span className="font-mono font-semibold text-[#002147]">{forgotData.email}</span>.
+                      Token generated for <strong>{forgotData.user?.name}</strong> ({forgotData.email}). Expires in 30 minutes.
                     </p>
-
-                    <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs font-mono text-slate-700 break-all select-all flex items-center justify-between gap-2">
-                      <span className="truncate">{forgotData.resetLink}</span>
-                      <span className="shrink-0 text-[10px] font-bold text-[#002147] bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
-                        RESET LINK
-                      </span>
+                    <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs font-mono text-slate-700 break-all select-all">
+                      {forgotData.resetToken}
                     </div>
                   </div>
 
@@ -615,7 +610,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     className="w-full py-3 bg-[#c29b38] hover:bg-[#d4ac47] text-[#001530] font-black text-xs sm:text-sm rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 active:scale-[0.99]"
                   >
                     <Lock className="w-4 h-4" />
-                    <span>Click Link to Add New Password</span>
+                    <span>Continue to Set New Password</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
 

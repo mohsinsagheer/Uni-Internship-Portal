@@ -279,7 +279,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
   // ═══════════════════════════════════════════════════════════════
   // TAB: DASHBOARD (Incharge profile overview + KPI)
   // ═══════════════════════════════════════════════════════════════
-  if (activeTab === 'dashboard') {
+  if (activeTab === 'dashboard' || !activeTab) {
     return (
       <div className="space-y-6 fade-in">
         {/* ─── INCHARGE PROFILE CARD (Matching Website Header Gradient) ─── */}

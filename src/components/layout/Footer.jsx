@@ -1,7 +1,9 @@
 import React from 'react';
 import { ShieldCheck, BookOpen, FileText } from 'lucide-react';
+import { usePortal } from '../../context/PortalContext';
 
 export default function Footer({ onOpenDirectives }) {
+  const { isOnline } = usePortal();
   return (
     <footer className="mt-16 bg-gradient-to-r from-[#001530] via-[#002147] to-[#082a52] text-slate-200 border-t-2 border-[#c29b38]/40 shadow-[0_-8px_32px_0_rgba(0,15,40,0.4)]">
       <div className="w-full px-4 sm:px-8 lg:px-12 py-8">
@@ -72,8 +74,10 @@ export default function Footer({ onOpenDirectives }) {
         <div className="mt-6 pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400 text-center sm:text-left">
           <p>© 2026 COMSATS University Islamabad. All Rights Reserved. Official Portal for Student Dossier &amp; Digital Clearance.</p>
           <div className="flex items-center gap-2 text-[11px]">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-emerald-400 font-semibold">System Online &amp; Synchronized</span>
+            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`}></span>
+            <span className={isOnline ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>
+              {isOnline ? 'System Online' : 'Offline — data stored locally'}
+            </span>
           </div>
         </div>
       </div>

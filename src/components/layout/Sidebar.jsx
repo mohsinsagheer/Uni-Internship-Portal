@@ -75,7 +75,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(isActive ? '' : item.id)}
+                onClick={() => setActiveTab(item.id)}
                 className={`portal-nav-item w-full flex items-center justify-between px-4 py-3.5 text-sm font-medium rounded-xl transition-all duration-200 group ${isActive
                     ? 'bg-gradient-to-r from-[#001530] to-[#002b5c] text-white shadow-md border border-[#c29b38]/40'
                     : 'text-slate-700 hover:bg-slate-50 hover:text-[#002147] border border-transparent hover:border-slate-200'
