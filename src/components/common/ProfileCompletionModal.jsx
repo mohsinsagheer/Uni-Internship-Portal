@@ -172,10 +172,7 @@ export default function ProfileCompletionModal({ isOpen, onClose }) {
                     onChange={(e) => handleChange('semester', e.target.value)}
                     className="w-full px-2.5 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002147] bg-white font-semibold text-slate-800 shadow-sm"
                   >
-                    <option value="1st Semester">1st Semester</option>
-                    <option value="2nd Semester">2nd Semester</option>
-                    <option value="3rd Semester">3rd Semester</option>
-                    <option value="4th Semester">4th Semester</option>
+                    <option value="">Select semester</option>
                     <option value="5th Semester">5th Semester</option>
                     <option value="6th Semester">6th Semester</option>
                     <option value="7th Semester">7th Semester</option>

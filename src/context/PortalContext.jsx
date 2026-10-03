@@ -284,8 +284,8 @@ export const PortalProvider = ({ children }) => {
     [supervisors, viewCampus]
   );
   const campusTemplates = useMemo(
-    () => templates.filter((t) => (t.campusId || 'isb') === viewCampus),
-    [templates, viewCampus]
+    () => templates,
+    [templates]
   );
   const campusIncharges = useMemo(
     () => inchargeUsers.filter((u) => (u.campusId || 'isb') === viewCampus),
@@ -307,7 +307,7 @@ export const PortalProvider = ({ children }) => {
     const docs = Array.isArray(student?.documents) ? student.documents : [];
     if (docs.length === 0) return false;
 
-    const requiredTemplateIds = campusTemplates.map((tpl) => tpl.id).filter(Boolean);
+    const requiredTemplateIds = templates.map((tpl) => tpl.id).filter(Boolean);
     if (requiredTemplateIds.length > 0) {
       const submittedTemplateIds = new Set(
         docs.filter((doc) => doc?.templateId && requiredTemplateIds.includes(doc.templateId)).map((doc) => doc.templateId)
@@ -323,10 +323,7 @@ export const PortalProvider = ({ children }) => {
   const getStudentOverallStatus = (documents = [], campusId = viewCampus) => {
     if (!Array.isArray(documents) || documents.length === 0) return 'pending_submission';
 
-    const requiredTemplateIds = templates
-      .filter((tpl) => (tpl.campusId || 'isb') === (campusId || viewCampus))
-      .map((tpl) => tpl.id)
-      .filter(Boolean);
+    const requiredTemplateIds = templates.map((tpl) => tpl.id).filter(Boolean);
     const allRequiredTemplatesSubmitted = requiredTemplateIds.length === 0 || requiredTemplateIds.every((templateId) =>
       documents.some((doc) => doc.templateId === templateId)
     );
