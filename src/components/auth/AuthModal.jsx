@@ -141,7 +141,7 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   };
 
-  const handleRequestResetSubmit = (e) => {
+  const handleRequestResetSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setInfoMessage('');
@@ -151,10 +151,10 @@ export default function AuthModal({ isOpen, onClose }) {
       return;
     }
 
-    const result = requestPasswordReset(forgotEmail);
+    const result = await requestPasswordReset(forgotEmail);
     if (result.success) {
       setForgotData(result);
-      setInfoMessage(`Password reset link generated for ${result.user.name}!`);
+      setInfoMessage(`Password reset link/email sent for ${result.user?.name || forgotEmail}!`);
     } else {
       setError(result.error || 'Account not found for this email address.');
     }

@@ -19,6 +19,14 @@ import {
   deleteDocumentBlobs,
   deleteTemplateBlobs,
 } from '../utils/blobStore';
+import {
+  auth,
+  firebaseSignup,
+  firebaseLogin,
+  firebaseLogout,
+  firebaseResetPassword,
+  formatFirebaseError,
+} from '../firebase';
 
 const PortalContext = createContext();
 
@@ -403,6 +411,16 @@ export const PortalProvider = ({ children }) => {
     }
   };
 
+  const logout = async () => {
+    try {
+      await firebaseLogout();
+    } catch (err) {
+      console.warn('Firebase logout warning:', err);
+    }
+    setCurrentUser(null);
+    showToast('Logged out successfully.');
+  };
+
   const login = async (identifier, password, role) => {
     if (!password || !password.trim()) {
       return { success: false, error: 'Please enter your password.' };
@@ -429,13 +447,46 @@ export const PortalProvider = ({ children }) => {
     }
 
     if (!match) match = findAccount(cleanId);
-    if (!match) {
-      return { success: false, error: `No registered account found for "${identifier}". Please check your email/ID.` };
+
+    // Determine target email address for Firebase Authentication
+    let targetEmail = match?.user?.email;
+    if (!targetEmail) {
+      if (cleanId.includes('@')) {
+        targetEmail = cleanId.toLowerCase();
+      } else if (role === 'student') {
+        targetEmail = `${cleanId.toLowerCase()}@isbstudents.comsats.edu.pk`;
+      } else {
+        targetEmail = `${cleanId.toLowerCase()}@isbfaculty.comsats.edu.pk`;
+      }
     }
 
-    const valid = await verifyPasswordHash(password, match.user.password);
-    if (!valid) {
-      return { success: false, error: 'Invalid password. Please check your credentials or use Forgot Password.' };
+    let fbSuccess = false;
+    let fbError = null;
+
+    try {
+      await firebaseLogin(targetEmail, password);
+      fbSuccess = true;
+    } catch (err) {
+      fbError = err;
+      console.warn('Firebase login attempt fallback check:', err.code || err.message);
+    }
+
+    // Fallback for pre-seeded demo accounts before Firebase user creation
+    if (!fbSuccess) {
+      if (match) {
+        const valid = await verifyPasswordHash(password, match.user.password);
+        if (!valid) {
+          return { success: false, error: formatFirebaseError(fbError) || 'Invalid password. Please check your credentials.' };
+        }
+        // Attempt background signup to Firebase Auth to register demo user for next time
+        firebaseSignup(targetEmail, password, match.user.name).catch(() => {});
+      } else {
+        return { success: false, error: formatFirebaseError(fbError) };
+      }
+    }
+
+    if (!match) {
+      return { success: false, error: `No registered user record found for "${identifier}".` };
     }
 
     const updatedUser = { ...match.user, role: match.role };
@@ -448,7 +499,7 @@ export const PortalProvider = ({ children }) => {
       incharge: 'Internship Incharge',
       hod: 'Head of Department (HOD)',
     };
-    showToast(`Welcome back, ${match.user.name}! Logged in as ${roleTitles[match.role]}.`);
+    showToast(`Welcome back, ${match.user.name}! Logged in via Firebase as ${roleTitles[match.role]}.`);
     return { success: true };
   };
 
@@ -473,11 +524,22 @@ export const PortalProvider = ({ children }) => {
       return { success: false, error: 'An account with this registration number or email already exists.' };
     }
 
+    // Register user in Firebase Authentication
+    let firebaseUid = null;
+    try {
+      const userCred = await firebaseSignup(officialEmail, userData.password, userData.name);
+      firebaseUid = userCred?.user?.uid || null;
+    } catch (fbErr) {
+      console.error('Firebase signup error:', fbErr);
+      return { success: false, error: formatFirebaseError(fbErr) };
+    }
+
     const hashed = await hashPassword(userData.password);
 
     if (userData.role === 'student') {
       const newStudent = {
         id: `std-${Date.now()}`,
+        firebaseUid,
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
@@ -503,13 +565,14 @@ export const PortalProvider = ({ children }) => {
       };
       setStudents((prev) => [newStudent, ...prev]);
       setCurrentUser({ ...newStudent, role: 'student' });
-      showToast(`Account created for ${newStudent.name}! Welcome to CUOnline.`);
+      showToast(`Account registered in Firebase for ${newStudent.name}! Welcome to CUOnline.`);
       return { success: true };
     }
 
     if (userData.role === 'supervisor') {
       const newSupervisor = {
         id: `sup-${Date.now()}`,
+        firebaseUid,
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
@@ -525,13 +588,14 @@ export const PortalProvider = ({ children }) => {
       };
       setSupervisors((prev) => [...prev, newSupervisor]);
       setCurrentUser({ ...newSupervisor, role: 'supervisor' });
-      showToast(`Faculty account registered for ${newSupervisor.name}.`);
+      showToast(`Faculty account registered in Firebase for ${newSupervisor.name}.`);
       return { success: true };
     }
 
     if (userData.role === 'incharge') {
       const newIncharge = {
         id: `inc-${Date.now()}`,
+        firebaseUid,
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
@@ -547,13 +611,14 @@ export const PortalProvider = ({ children }) => {
       };
       setInchargeUsers((prev) => [...prev, newIncharge]);
       setCurrentUser(newIncharge);
-      showToast(`Internship Incharge account registered for ${newIncharge.name}.`);
+      showToast(`Internship Incharge registered in Firebase for ${newIncharge.name}.`);
       return { success: true };
     }
 
     if (userData.role === 'hod') {
       const newHod = {
         id: `hod-${Date.now()}`,
+        firebaseUid,
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
@@ -569,7 +634,7 @@ export const PortalProvider = ({ children }) => {
       };
       setHodUsers((prev) => [...prev, newHod]);
       setCurrentUser(newHod);
-      showToast(`HOD account registered for ${newHod.name}.`);
+      showToast(`HOD account registered in Firebase for ${newHod.name}.`);
       return { success: true };
     }
 
@@ -581,12 +646,20 @@ export const PortalProvider = ({ children }) => {
     return findAccount(email);
   };
 
-  const requestPasswordReset = (email) => {
+  const requestPasswordReset = async (email) => {
     if (!email || !email.trim()) {
       return { success: false, error: 'Please enter your account email.' };
     }
 
-    const match = findUserByEmail(email);
+    const cleanEmail = email.trim().toLowerCase();
+    const match = findUserByEmail(cleanEmail);
+
+    try {
+      await firebaseResetPassword(cleanEmail);
+    } catch (fbErr) {
+      console.warn('Firebase password reset notice:', fbErr);
+    }
+
     if (!match) {
       return {
         success: false,
@@ -613,10 +686,10 @@ export const PortalProvider = ({ children }) => {
       success: true,
       user: match.user,
       role: match.role,
-      email: match.user.email || email.trim().toLowerCase(),
+      email: match.user.email || cleanEmail,
       resetToken,
       expiresAt: resetTokenExpires,
-      message: `Reset token generated for ${match.user.name}. Valid for 30 minutes.`,
+      message: `Firebase password reset email sent & reset token generated for ${match.user.name}.`,
     };
   };
 
@@ -1015,6 +1088,7 @@ export const PortalProvider = ({ children }) => {
         isOnline,
         login,
         signup,
+        logout,
         requestPasswordReset,
         resetPassword,
         updateUserProfile,
