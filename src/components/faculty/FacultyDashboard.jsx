@@ -67,25 +67,28 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
     name: currentUser?.name || '',
     designation: currentUser?.designation || '',
     department: currentUser?.department || '',
-    email: currentUser?.email || '',
+    officialEmail: currentUser?.officialEmail || currentUser?.email || '',
     phone: currentUser?.phone || '',
   });
   const [savedProfile, setSavedProfile] = useState({ ...profileDraft });
 
   useEffect(() => {
+    if (editingProfile) return;
+
     const updated = {
       name: currentUser?.name || '',
       designation: currentUser?.designation || '',
       department: currentUser?.department || '',
-      email: currentUser?.email || '',
+      officialEmail: currentUser?.officialEmail || currentUser?.email || '',
       phone: currentUser?.phone || '',
     };
     setProfileDraft(updated);
     setSavedProfile(updated);
-  }, [currentUser]);
+  }, [currentUser, editingProfile]);
 
   const handleSaveProfile = () => {
-    if (profileDraft.email && !isOfficialUniversityEmail(profileDraft.email)) {
+    const officialEmail = profileDraft.officialEmail.trim();
+    if (officialEmail && !isOfficialUniversityEmail(officialEmail)) {
       showToast('Official email must end with @isbfaculty.comsats.edu.pk or @isbstudents.comsats.edu.pk', 'error');
       return;
     }
@@ -93,10 +96,10 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
       name: profileDraft.name || null,
       designation: profileDraft.designation || null,
       department: profileDraft.department || null,
-      email: profileDraft.email || null,
+      officialEmail: officialEmail || null,
       phone: profileDraft.phone || null,
     });
-    setSavedProfile({ ...profileDraft });
+    setSavedProfile({ ...profileDraft, officialEmail });
     setEditingProfile(false);
   };
   const handleCancelProfile = () => {
@@ -208,18 +211,19 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
                 <p className="text-sm font-bold" style={{ color: '#e8c96a' }}>Edit Profile Details</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[
-                    { key: 'name', label: 'Full Name', placeholder: 'Dr. / Mr. Full Name' },
-                    { key: 'designation', label: 'Designation', placeholder: 'Lecturer / Assistant Professor' },
-                    { key: 'department', label: 'Department', placeholder: 'Computer Science' },
-                    { key: 'email', label: 'Official University Email', placeholder: 'e.g. name@isbfaculty.comsats.edu.pk' },
-                    { key: 'phone', label: 'Phone / Ext.', placeholder: 'e.g. 051-90495049' },
-                  ].map(({ key, label, placeholder }) => (
+                    { key: 'name', label: 'Full Name', placeholder: 'Dr. / Mr. Full Name', type: 'text', autoComplete: 'name' },
+                    { key: 'designation', label: 'Designation', placeholder: 'Lecturer / Assistant Professor', type: 'text', autoComplete: 'organization-title' },
+                    { key: 'department', label: 'Department', placeholder: 'Computer Science', type: 'text', autoComplete: 'organization' },
+                    { key: 'officialEmail', label: 'Official University Email', placeholder: 'e.g. name@isbfaculty.comsats.edu.pk', type: 'email', autoComplete: 'email' },
+                    { key: 'phone', label: 'Phone / Ext.', placeholder: 'e.g. 051-90495049', type: 'tel', autoComplete: 'tel' },
+                  ].map(({ key, label, placeholder, type, autoComplete }) => (
                     <div key={key}>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5"
+                      <label htmlFor={`faculty-profile-${key}`} className="block text-[10px] font-bold uppercase tracking-widest mb-1.5"
                         style={{ color: 'rgba(232,201,106,0.75)' }}>{label}</label>
-                      <input type="text" value={profileDraft[key]}
+                      <input id={`faculty-profile-${key}`} type={type} value={profileDraft[key]}
                         onChange={(e) => setProfileDraft((d) => ({ ...d, [key]: e.target.value }))}
                         placeholder={placeholder}
+                        autoComplete={autoComplete}
                         className="w-full px-4 py-2.5 rounded-xl text-sm font-medium text-slate-900 border-0 focus:outline-none focus:ring-2 focus:ring-yellow-400 shadow-sm"
                         style={{ background: 'rgba(255,255,255,0.93)' }} />
                     </div>
@@ -248,8 +252,10 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
                     {savedProfile.designation || currentUser?.designation || 'NULL'}
                   </p>
                   <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.52)' }}>
-                    {savedProfile.department || currentUser?.department ? `Department of ${savedProfile.department || currentUser?.department}` : 'Department: NULL'}&nbsp;·&nbsp;
-                    <span className="font-mono font-bold" style={{ color: '#e8c96a' }}>{currentUser?.regNo || 'NULL'}</span>
+                    {savedProfile.department || currentUser?.department ? `Department of ${savedProfile.department || currentUser?.department}` : 'Department: NULL'}
+                  </p>
+                  <p className="text-xs mt-1 font-mono" style={{ color: 'rgba(255,255,255,0.52)' }}>
+                    ID: <span className="font-bold" style={{ color: '#e8c96a' }}>{currentUser?.regNo || 'NULL'}</span>
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2.5">
@@ -257,7 +263,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
                     style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.92)', border: '1px solid rgba(255,255,255,0.20)', backdropFilter: 'blur(6px)' }}>
                     <Mail className="w-4 h-4 text-sky-300 shrink-0" />
                     <span className="font-bold text-sky-200">Official Email:</span>
-                    <span className="font-mono font-bold">{savedProfile.email || currentUser?.email || 'NULL'}</span>
+                    <span className="font-mono font-bold break-all">{savedProfile.officialEmail || currentUser?.officialEmail || currentUser?.email || 'NULL'}</span>
                   </span>
                   {savedProfile.phone ? (
                     <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
@@ -352,7 +358,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
   if (activeTab === 'dashboard' || !activeTab) {
     return (
       <div className="space-y-6 fade-in">
-        <ProfileCard />
+        {ProfileCard()}
         <KpiCards />
         <div className="flex items-center gap-2 text-xs text-slate-400 italic px-1">
           <LayoutDashboard className="w-3.5 h-3.5" />

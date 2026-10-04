@@ -59,12 +59,12 @@ export default function Footer({ onOpenDirectives }) {
               Education Portal
             </a>
             <a
-              href="https://ww5.comsats.edu.pk/Alumni/"
+              href="https://admissions.comsats.edu.pk/"
               target="_blank"
               rel="noreferrer"
               className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/15 hover:bg-white/20 hover:text-white transition-all"
             >
-              CUI Awards
+              CUI Admissions
             </a>
           </div>
 

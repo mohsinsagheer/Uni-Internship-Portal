@@ -13,13 +13,12 @@ import {
   PhoneCall,
   Mail,
   Download,
-  ExternalLink,
-  HelpCircle,
 } from 'lucide-react';
-import { usePortal } from '../../context/PortalContext';
+import { usePortal, downloadTemplateFile } from '../../context/PortalContext';
 
 export default function InternshipDirectivesPage({ onBack }) {
   const { templates = [] } = usePortal();
+  const handleDownloadTemplate = (template) => downloadTemplateFile(template);
   const directives = [
     {
       id: 'd1',
@@ -191,20 +190,30 @@ export default function InternshipDirectivesPage({ onBack }) {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {templates.map((tpl) => (
-              <div key={tpl.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+              <button
+                key={tpl.id}
+                type="button"
+                onClick={() => handleDownloadTemplate(tpl)}
+                title={`Download ${tpl.title}`}
+                className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2 text-left hover:border-[#c29b38] hover:bg-amber-50/50 focus:outline-none focus:ring-2 focus:ring-[#c29b38] transition-colors"
+              >
                 <span className="font-mono font-bold text-xs text-[#002147] bg-white px-2 py-0.5 rounded border border-slate-200 block w-fit">
                   {tpl.code}
                 </span>
-                <h4 className="font-bold text-sm text-slate-900 leading-snug">{tpl.title}</h4>
-                <p className="text-[11px] text-slate-600 font-medium">Category: {tpl.category}</p>
-                <div className="flex gap-1 flex-wrap pt-1">
+                <span className="block font-bold text-sm text-slate-900 leading-snug">{tpl.title}</span>
+                <span className="block text-[11px] text-slate-600 font-medium">Category: {tpl.category}</span>
+                <span className="flex gap-1 flex-wrap pt-1">
                   {tpl.requiredSignatures.map((sig) => (
                     <span key={sig} className="text-[9px] px-1.5 py-0.5 bg-white text-slate-700 font-bold uppercase rounded border border-slate-200">
                       {sig}
                     </span>
                   ))}
-                </div>
-              </div>
+                </span>
+                <span className="flex items-center gap-1.5 pt-1 text-[11px] font-bold text-[#002147]">
+                  <Download className="w-3.5 h-3.5" />
+                  Download template
+                </span>
+              </button>
             ))}
           </div>
         )}
