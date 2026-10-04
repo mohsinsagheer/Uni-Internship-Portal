@@ -24,7 +24,6 @@ export const INITIAL_SUPERVISORS = [
     regNo: 'EMP-CS-108',
     name: 'Dr. Zeeshan Ali',
     email: 'zeeshan.ali@isbfaculty.comsats.edu.pk',
-    password: 'password123',
     designation: 'Associate Professor',
     department: 'Department of Computer Science',
     office: 'Room 204, Academic Block 2',
@@ -38,7 +37,6 @@ export const INITIAL_SUPERVISORS = [
     regNo: 'EMP-CS-214',
     name: 'Dr. Farhana Kausar',
     email: 'farhana.kausar@isbfaculty.comsats.edu.pk',
-    password: 'password123',
     designation: 'Assistant Professor',
     department: 'Department of Software Engineering',
     office: 'Room 112, Academic Block 1',
@@ -52,7 +50,6 @@ export const INITIAL_SUPERVISORS = [
     regNo: 'EMP-CS-302',
     name: 'Engr. Tariq Mahmood',
     email: 'tariq.mahmood@isbfaculty.comsats.edu.pk',
-    password: 'password123',
     designation: 'Senior Lecturer',
     department: 'Department of Computer Science',
     office: 'Room 318, Academic Block 3',
@@ -68,7 +65,6 @@ export const INITIAL_INCHARGE = {
   regNo: 'INC-CS-002',
   name: 'Dr. Usama Nadeem',
   email: 'internship.cs@isbfaculty.comsats.edu.pk',
-  password: 'password123',
   designation: 'Convener & Internship Incharge',
   department: 'Department of Computer Science',
   office: 'Placement & Internship Cell, Student Service Centre',
@@ -85,7 +81,6 @@ export const INITIAL_HOD = {
   regNo: 'HOD-CS-001',
   name: 'Prof. Dr. Majid Iqbal Khan',
   email: 'hod.cs@isbfaculty.comsats.edu.pk',
-  password: 'password123',
   designation: 'Head of Department / Chairperson',
   department: 'Department of Computer Science',
   office: 'HoD Secretariat, 3rd Floor, Faculty Block',
@@ -100,129 +95,8 @@ export const INITIAL_HODS = [INITIAL_HOD];
 // University pre-uploaded official templates (empty by default - populated by Incharge uploads)
 export const OFFICIAL_TEMPLATES = [];
 
-// Initial Students
-export const INITIAL_STUDENTS = [
-  {
-    id: 'std-1',
-    regNo: 'FA21-BCS-045',
-    name: 'Muhammad Hamza Khan',
-    email: 'fa21-bcs-045@isbstudents.comsats.edu.pk',
-    password: 'password123',
-    campusId: 'isb',
-    program: 'BS Computer Science',
-    semester: '7th Semester',
-    cgpa: '3.52',
-    phone: '+92 334 1234567',
-    assignedSupervisorId: 'sup-1', // Dr. Zeeshan Ali
-    internshipCompany: 'Systems Limited, Islamabad',
-    internshipRole: 'Full Stack Software Intern',
-    internshipDuration: '8 Weeks (July 2026 - Sept 2026)',
-    status: 'pending_submission',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
-    notifications: [],
-    documents: []
-  },
-  {
-    id: 'std-2',
-    regNo: 'SP22-BCS-102',
-    name: 'Ayesha Noor Malik',
-    email: 'sp22-bcs-102@isbstudents.comsats.edu.pk',
-    password: 'password123',
-    campusId: 'isb',
-    program: 'BS Computer Science',
-    semester: '6th Semester',
-    cgpa: '3.78',
-    phone: '+92 301 9876543',
-    assignedSupervisorId: 'sup-2', // Dr. Farhana Kausar
-    internshipCompany: 'Devsinc, Islamabad',
-    internshipRole: 'React & UI/UX Design Intern',
-    internshipDuration: '6 Weeks (Aug 2026 - Sept 2026)',
-    status: 'pending_submission',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80',
-    notifications: [],
-    documents: []
-  },
-  {
-    id: 'std-3',
-    regNo: 'FA21-BSE-019',
-    name: 'Bilal Tariq',
-    email: 'fa21-bse-019@isbstudents.comsats.edu.pk',
-    password: 'password123',
-    campusId: 'isb',
-    program: 'BS Software Engineering',
-    semester: '7th Semester',
-    cgpa: '3.41',
-    phone: '+92 312 3456789',
-    assignedSupervisorId: 'sup-1', // Dr. Zeeshan Ali
-    internshipCompany: 'Afiniti, Islamabad',
-    internshipRole: 'QA Automation Intern',
-    internshipDuration: '8 Weeks',
-    status: 'pending_submission',
-    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=160&q=80',
-    notifications: [],
-    documents: []
-  },
-  {
-    id: 'std-4',
-    regNo: 'FA21-BCS-088',
-    name: 'Zainab Fatima',
-    email: 'fa21-bcs-088@isbstudents.comsats.edu.pk',
-    password: 'password123',
-    campusId: 'isb',
-    program: 'BS Computer Science',
-    semester: '7th Semester',
-    cgpa: '3.65',
-    phone: '+92 321 8765432',
-    assignedSupervisorId: null, // Unassigned! (Demonstrates Incharge allocation feature)
-    internshipCompany: 'Nayatel, Islamabad',
-    internshipRole: 'Cloud & Network Intern',
-    internshipDuration: '6 Weeks',
-    status: 'pending_submission',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=160&q=80',
-    notifications: [],
-    documents: []
-  },
-  {
-    id: 'std-5',
-    regNo: 'SP21-BCS-155',
-    name: 'Daniyal Ahmed Sheikh',
-    email: 'sp21-bcs-155@isbstudents.comsats.edu.pk',
-    password: 'password123',
-    campusId: 'isb',
-    program: 'BS Computer Science',
-    semester: '8th Semester',
-    cgpa: '3.89',
-    phone: '+92 333 4567890',
-    assignedSupervisorId: 'sup-3', // Engr. Tariq Mahmood
-    internshipCompany: 'Teradata, Islamabad',
-    internshipRole: 'Data Engineering Intern',
-    internshipDuration: '8 Weeks',
-    status: 'pending_submission',
-    avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=160&q=80',
-    notifications: [],
-    documents: []
-  },
-  {
-    id: 'std-6',
-    regNo: 'FA21-BCS-112',
-    name: 'Kashif Mehmood',
-    email: 'fa21-bcs-112@isbstudents.comsats.edu.pk',
-    password: 'password123',
-    campusId: 'isb',
-    program: 'BS Computer Science',
-    semester: '7th Semester',
-    cgpa: '3.15',
-    phone: '+92 345 5566778',
-    assignedSupervisorId: 'sup-2', // Dr. Farhana Kausar
-    internshipCompany: 'Confiz Solutions',
-    internshipRole: 'Mobile App Developer Intern',
-    internshipDuration: '8 Weeks',
-    status: 'pending_submission',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&q=80',
-    notifications: [],
-    documents: []
-  }
-];
+// Initial Students (Empty by default - registered dynamically via Firebase Auth)
+export const INITIAL_STUDENTS = [];
 
 export const NOTICES = [
   '⚡ Internship Directive: Mandatory 6 to 8 weeks consecutive tenure required for official 3-credit academic award.',

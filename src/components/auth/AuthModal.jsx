@@ -22,6 +22,7 @@ import { usePortal } from '../../context/PortalContext';
 
 export default function AuthModal({ isOpen, onClose }) {
   const {
+    currentUser,
     login,
     signup,
     requestPasswordReset,
@@ -135,7 +136,10 @@ export default function AuthModal({ isOpen, onClose }) {
     });
 
     if (result.success) {
-      onClose();
+      setInfoMessage('Account registered! A verification link has been sent to your email. Please check your inbox.');
+      setTimeout(() => {
+        onClose();
+      }, 3000);
     } else {
       setError(result.error || 'Registration failed. Please check your details.');
     }
@@ -154,7 +158,7 @@ export default function AuthModal({ isOpen, onClose }) {
     const result = await requestPasswordReset(forgotEmail);
     if (result.success) {
       setForgotData(result);
-      setInfoMessage(`Password reset link/email sent for ${result.user?.name || forgotEmail}!`);
+      setInfoMessage(`Firebase password reset email sent to ${result.email}!`);
     } else {
       setError(result.error || 'Account not found for this email address.');
     }
@@ -222,13 +226,19 @@ export default function AuthModal({ isOpen, onClose }) {
               </div>
             </div>
 
-            <button
-              onClick={onClose}
-              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors border border-white/10 shrink-0"
-              title="Close"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {currentUser ? (
+              <button
+                onClick={onClose}
+                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors border border-white/10 shrink-0"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            ) : (
+              <span className="text-[10px] font-black text-[#facc15] bg-[#001736] border border-[#c29b38]/60 px-3 py-1.5 rounded-xl uppercase tracking-wider shrink-0">
+                Sign In Required
+              </span>
+            )}
           </div>
         </div>
 
@@ -558,7 +568,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     Reset Account Password
                   </h4>
                   <p className="text-xs text-slate-500">
-                    Provide your account email to generate a 30-minute reset token.
+                    Provide your account email to receive a password reset link via Firebase.
                   </p>
                 </div>
               </div>
@@ -586,41 +596,40 @@ export default function AuthModal({ isOpen, onClose }) {
                     className="w-full py-3 bg-gradient-to-r from-[#002147] via-[#0a3264] to-[#002147] hover:from-[#001738] hover:to-[#06244a] text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border border-[#c29b38]/40 active:scale-[0.99]"
                   >
                     <Send className="w-4 h-4 text-[#facc15]" />
-                    <span>Generate Reset Token</span>
+                    <span>Send Password Reset Email</span>
                   </button>
                 </form>
               ) : (
                 <div className="space-y-4">
-                  <div className="p-4 bg-amber-50/80 border border-amber-300 rounded-2xl space-y-2">
-                    <div className="flex items-center gap-2 text-amber-900 font-bold text-xs sm:text-sm">
-                      <KeyRound className="w-4 h-4 text-[#c29b38]" />
-                      <span>Reset Token Created</span>
+                  <div className="p-4 bg-sky-50/90 border border-sky-300 rounded-2xl space-y-2">
+                    <div className="flex items-center gap-2 text-[#002147] font-bold text-xs sm:text-sm">
+                      <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600" />
+                      <span>Firebase Reset Email Sent</span>
                     </div>
                     <p className="text-xs text-slate-700 leading-relaxed">
-                      Token generated for <strong>{forgotData.user?.name}</strong> ({forgotData.email}). Expires in 30 minutes.
+                      An official password reset email has been dispatched to <strong className="text-[#002147]">{forgotData.email}</strong> via Firebase Auth.
                     </p>
-                    <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs font-mono text-slate-700 break-all select-all">
-                      {forgotData.resetToken}
-                    </div>
+                    <p className="text-[11px] text-slate-500 italic">
+                      Please check your inbox (including Spam/Junk folder) and click the link inside to set your new password.
+                    </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('reset')}
-                    className="w-full py-3 bg-[#c29b38] hover:bg-[#d4ac47] text-[#001530] font-black text-xs sm:text-sm rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 active:scale-[0.99]"
-                  >
-                    <Lock className="w-4 h-4" />
-                    <span>Continue to Set New Password</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRequestResetSubmit}
+                      className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Resend Reset Email</span>
+                    </button>
 
-                  <div className="text-center">
                     <button
                       type="button"
                       onClick={() => switchTab('login')}
-                      className="text-xs font-bold text-slate-600 hover:text-[#002147] underline"
+                      className="w-full py-2.5 bg-[#002147] hover:bg-[#001738] text-white font-bold text-xs rounded-xl transition-colors shadow flex items-center justify-center gap-2"
                     >
-                      Return to Sign In
+                      <span>Return to Sign In</span>
                     </button>
                   </div>
                 </div>

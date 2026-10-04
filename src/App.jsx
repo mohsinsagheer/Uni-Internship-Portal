@@ -26,8 +26,15 @@ export default function App() {
   } = usePortal();
 
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(!currentUser);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+
+  // Automatically prompt for Login/Signup on load or logout when currentUser is null
+  useEffect(() => {
+    if (!currentUser) {
+      setAuthModalOpen(true);
+    }
+  }, [currentUser]);
 
   // Check if current user is newly created with null profile info
   useEffect(() => {

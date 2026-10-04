@@ -7,14 +7,17 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   updateProfile,
 } from "firebase/auth";
-
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+} from "firebase/firestore";
 
 // Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyA5Np7wPeAuw-a5DdBJ7QJClwSWmCDW3Tc",
   authDomain: "internsip-docs-portal.firebaseapp.com",
@@ -28,8 +31,9 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Auth
+// Initialize Firebase Auth & Firestore
 export const auth = getAuth(app);
+export const db = getFirestore(app);
 
 // Initialize Analytics (supported in browser environment)
 export let analytics;
@@ -41,11 +45,24 @@ if (typeof window !== "undefined") {
   }).catch(() => {});
 }
 
-// Authentication helper functions
+// Authentication & Verification helper functions
+export const firebaseSendEmailVerification = async (user) => {
+  const targetUser = user || auth.currentUser;
+  if (!targetUser) throw new Error("No user found to send verification email.");
+  return await sendEmailVerification(targetUser);
+};
+
 export const firebaseSignup = async (email, password, displayName) => {
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   if (displayName && userCredential.user) {
     await updateProfile(userCredential.user, { displayName });
+  }
+  if (userCredential.user) {
+    try {
+      await sendEmailVerification(userCredential.user);
+    } catch (verr) {
+      console.warn("Email verification send notice:", verr);
+    }
   }
   return userCredential;
 };
@@ -60,6 +77,36 @@ export const firebaseLogout = async () => {
 
 export const firebaseResetPassword = async (email) => {
   return await sendPasswordResetEmail(auth, email);
+};
+
+// Store user role and email in Firebase Firestore
+export const saveUserRoleToFirestore = async (uid, email, role, extraData = {}) => {
+  try {
+    const userRef = doc(db, "users", uid);
+    await setDoc(userRef, {
+      uid,
+      email: email.toLowerCase(),
+      role,
+      updatedAt: new Date().toISOString(),
+      ...extraData,
+    }, { merge: true });
+  } catch (err) {
+    console.warn("Firestore save user role notice:", err);
+  }
+};
+
+// Fetch user role and details from Firebase Firestore
+export const getUserRoleFromFirestore = async (uid) => {
+  try {
+    const userRef = doc(db, "users", uid);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      return snap.data();
+    }
+  } catch (err) {
+    console.warn("Firestore fetch user role notice:", err);
+  }
+  return null;
 };
 
 export const formatFirebaseError = (error) => {

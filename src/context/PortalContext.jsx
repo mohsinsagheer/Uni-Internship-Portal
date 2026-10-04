@@ -25,7 +25,10 @@ import {
   firebaseLogin,
   firebaseLogout,
   firebaseResetPassword,
+  firebaseSendEmailVerification,
   formatFirebaseError,
+  saveUserRoleToFirestore,
+  getUserRoleFromFirestore,
 } from '../firebase';
 
 const PortalContext = createContext();
@@ -187,7 +190,7 @@ export const PortalProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = readJson(STORAGE_KEYS.CURRENT_USER, null);
     if (saved) return withCampus({ ...saved, notifications: saved.notifications || [] });
-    return { ...INITIAL_STUDENTS[0], role: 'student' };
+    return null;
   });
 
   const [submissionFilter, setSubmissionFilter] = useState('all');
@@ -211,20 +214,24 @@ export const PortalProvider = ({ children }) => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [hydratedStudents, hydratedSupervisors, hydratedIncharge, hydratedHod, hydratedTemplates, hydratedCurrent] = await Promise.all([
+      const [hydratedStudents, hydratedSupervisors, hydratedIncharge, hydratedHod, hydratedTemplates] = await Promise.all([
         hydrateStudents(students),
         hydrateUsers(supervisors),
         hydrateUsers(inchargeUsers),
         hydrateUsers(hodUsers),
         hydrateTemplates(templates),
-        hydrateUsers([currentUser]),
       ]);
 
       const hashedStudents = await Promise.all(hydratedStudents.map(ensureHashedPassword));
       const hashedSupervisors = await Promise.all(hydratedSupervisors.map(ensureHashedPassword));
       const hashedIncharge = await Promise.all(hydratedIncharge.map(ensureHashedPassword));
       const hashedHod = await Promise.all(hydratedHod.map(ensureHashedPassword));
-      const hashedCurrent = await ensureHashedPassword(hydratedCurrent[0]);
+
+      if (currentUser) {
+        const hydratedCurrent = await hydrateUsers([currentUser]);
+        const hashedCurrent = await ensureHashedPassword(hydratedCurrent[0]);
+        if (!cancelled) setCurrentUser(hashedCurrent);
+      }
 
       if (cancelled) return;
       setStudents(hashedStudents);
@@ -232,7 +239,6 @@ export const PortalProvider = ({ children }) => {
       setInchargeUsers(hashedIncharge);
       setHodUsers(hashedHod);
       setTemplates(hydratedTemplates);
-      setCurrentUser(hashedCurrent);
       persistReady.current = true;
     })();
     return () => { cancelled = true; };
@@ -270,9 +276,26 @@ export const PortalProvider = ({ children }) => {
   }, [selectedCampus]);
 
   useEffect(() => {
-    if (!persistReady.current || !currentUser) return;
-    persistUsers([currentUser]).then((light) => localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(light[0])));
+    if (!persistReady.current) return;
+    if (currentUser) {
+      persistUsers([currentUser]).then((light) => localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(light[0])));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    }
   }, [currentUser]);
+
+  // Firebase Auth State Listener
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((fbUser) => {
+      if (fbUser && fbUser.email) {
+        const found = findUserByEmail(fbUser.email);
+        if (found) {
+          setCurrentUser((prev) => prev || { ...found.user, role: found.role, firebaseUid: fbUser.uid });
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [students, supervisors, inchargeUsers, hodUsers]);
 
   const showToast = (message, type = 'success') => {
     setToastMessage({ message, type, id: Date.now() });
@@ -348,41 +371,20 @@ export const PortalProvider = ({ children }) => {
     return 'pending_submission';
   };
 
+  const ROLE_NAMES = {
+    student: 'Student',
+    supervisor: 'Faculty Supervisor',
+    incharge: 'Internship Incharge',
+    hod: 'Head of Department (HOD)',
+  };
+
   const switchRole = (role, id = null) => {
-    if (role === 'student') {
-      const std = id ? students.find((s) => s.id === id) : (campusStudents[0] || students[0]);
-      if (std) {
-        setSelectedCampus(std.campusId || selectedCampus);
-        setCurrentUser({ ...std, role: 'student' });
-        showToast(`Switched view to Student: ${std.name} (${std.regNo})`, 'info');
-      }
-    } else if (role === 'supervisor') {
-      const sup = id ? supervisors.find((s) => s.id === id) : (campusSupervisors[0] || supervisors[0]);
-      if (sup) {
-        setSelectedCampus(sup.campusId || selectedCampus);
-        setCurrentUser({ ...sup, role: 'supervisor' });
-        showToast(`Switched view to Faculty Supervisor: ${sup.name} (${sup.regNo})`, 'info');
-      } else {
-        showToast('No faculty supervisor exists for this campus yet.', 'error');
-      }
-    } else if (role === 'incharge') {
-      const inc = id ? inchargeUsers.find((s) => s.id === id) : (campusIncharges[0] || inchargeUsers[0]);
-      if (inc) {
-        setSelectedCampus(inc.campusId || selectedCampus);
-        setCurrentUser({ ...inc, role: 'incharge' });
-        showToast(`Switched view to Internship Incharge: ${inc.name}`, 'info');
-      } else {
-        showToast('No internship incharge exists for this campus yet.', 'error');
-      }
-    } else if (role === 'hod') {
-      const hod = id ? hodUsers.find((s) => s.id === id) : (campusHods[0] || hodUsers[0]);
-      if (hod) {
-        setSelectedCampus(hod.campusId || selectedCampus);
-        setCurrentUser({ ...hod, role: 'hod' });
-        showToast(`Switched view to Head of Department (HOD): ${hod.name}`, 'info');
-      } else {
-        showToast('No HOD exists for this campus yet.', 'error');
-      }
+    if (currentUser && currentUser.role !== role) {
+      showToast(
+        `Role-Based Access Control: You are logged in as ${ROLE_NAMES[currentUser.role] || currentUser.role}. To access ${ROLE_NAMES[role] || role} portal, please Sign Out and log in with a ${ROLE_NAMES[role] || role} account.`,
+        'error'
+      );
+      return;
     }
   };
 
@@ -399,18 +401,6 @@ export const PortalProvider = ({ children }) => {
     return null;
   };
 
-  const persistPasswordOnUser = (match, hashed) => {
-    if (match.role === 'student') {
-      setStudents((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, password: hashed } : s)));
-    } else if (match.role === 'supervisor') {
-      setSupervisors((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, password: hashed } : s)));
-    } else if (match.role === 'incharge') {
-      setInchargeUsers((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, password: hashed } : s)));
-    } else if (match.role === 'hod') {
-      setHodUsers((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, password: hashed } : s)));
-    }
-  };
-
   const logout = async () => {
     try {
       await firebaseLogout();
@@ -421,85 +411,101 @@ export const PortalProvider = ({ children }) => {
     showToast('Logged out successfully.');
   };
 
-  const login = async (identifier, password, role) => {
+  const login = async (identifier, password, selectedRole = 'student') => {
     if (!password || !password.trim()) {
       return { success: false, error: 'Please enter your password.' };
     }
     if (!identifier || !identifier.trim()) {
-      return { success: false, error: role === 'student' ? 'Please enter your Registration Number.' : 'Please enter your Account Email.' };
+      return { success: false, error: selectedRole === 'student' ? 'Please enter your Registration Number.' : 'Please enter your Account Email.' };
     }
 
     const cleanId = identifier.trim();
-    let match = null;
 
-    if (role === 'student') {
-      const user = students.find((s) => isUserMatch(s, cleanId));
-      if (user) match = { user, role: 'student' };
-    } else if (role === 'supervisor') {
-      const user = supervisors.find((s) => isUserMatch(s, cleanId));
-      if (user) match = { user, role: 'supervisor' };
-    } else if (role === 'incharge') {
-      const user = inchargeUsers.find((s) => isUserMatch(s, cleanId));
-      if (user) match = { user, role: 'incharge' };
-    } else if (role === 'hod') {
-      const user = hodUsers.find((s) => isUserMatch(s, cleanId));
-      if (user) match = { user, role: 'hod' };
+    // ── CROSS-ROLE CHECK 1: Local Account Match Role Enforcement ──
+    const localMatch = findAccount(cleanId);
+    if (localMatch && localMatch.role !== selectedRole) {
+      const actualRoleName = ROLE_NAMES[localMatch.role] || localMatch.role;
+      const attemptedRoleName = ROLE_NAMES[selectedRole] || selectedRole;
+      return {
+        success: false,
+        error: `Cross-Role Login Denied: Your account is registered as "${actualRoleName}", but you selected "${attemptedRoleName}". Please select "${actualRoleName}" to sign in.`
+      };
     }
 
-    if (!match) match = findAccount(cleanId);
-
     // Determine target email address for Firebase Authentication
-    let targetEmail = match?.user?.email;
+    let targetEmail = localMatch?.user?.email;
     if (!targetEmail) {
       if (cleanId.includes('@')) {
         targetEmail = cleanId.toLowerCase();
-      } else if (role === 'student') {
+      } else if (selectedRole === 'student') {
         targetEmail = `${cleanId.toLowerCase()}@isbstudents.comsats.edu.pk`;
       } else {
         targetEmail = `${cleanId.toLowerCase()}@isbfaculty.comsats.edu.pk`;
       }
     }
 
-    let fbSuccess = false;
-    let fbError = null;
-
+    let fbUserCredential = null;
     try {
-      await firebaseLogin(targetEmail, password);
-      fbSuccess = true;
+      fbUserCredential = await firebaseLogin(targetEmail, password);
     } catch (err) {
-      fbError = err;
-      console.warn('Firebase login attempt fallback check:', err.code || err.message);
+      console.error('Firebase login failed:', err);
+      return { success: false, error: formatFirebaseError(err) };
     }
 
-    // Fallback for pre-seeded demo accounts before Firebase user creation
-    if (!fbSuccess) {
-      if (match) {
-        const valid = await verifyPasswordHash(password, match.user.password);
-        if (!valid) {
-          return { success: false, error: formatFirebaseError(fbError) || 'Invalid password. Please check your credentials.' };
-        }
-        // Attempt background signup to Firebase Auth to register demo user for next time
-        firebaseSignup(targetEmail, password, match.user.name).catch(() => {});
-      } else {
-        return { success: false, error: formatFirebaseError(fbError) };
-      }
+    const fbUser = fbUserCredential.user;
+
+    // ── CROSS-ROLE CHECK 2: Firestore Stored Role Metadata Enforcement ──
+    const firestoreData = await getUserRoleFromFirestore(fbUser.uid);
+    if (firestoreData && firestoreData.role && firestoreData.role !== selectedRole) {
+      await firebaseLogout().catch(() => {});
+      const actualRoleName = ROLE_NAMES[firestoreData.role] || firestoreData.role;
+      const attemptedRoleName = ROLE_NAMES[selectedRole] || selectedRole;
+      return {
+        success: false,
+        error: `Cross-Role Access Denied: Your Firebase account is registered as "${actualRoleName}". You cannot log in as "${attemptedRoleName}".`
+      };
     }
 
+    let match = localMatch;
+
+    // If account doesn't exist in local state arrays, create it dynamically under verified role
     if (!match) {
-      return { success: false, error: `No registered user record found for "${identifier}".` };
+      const cleanRegNo = cleanId.includes('@') ? cleanId.split('@')[0].toUpperCase() : cleanId.toUpperCase();
+      const newRecord = {
+        id: `${selectedRole.slice(0, 3)}-${Date.now()}`,
+        firebaseUid: fbUser.uid,
+        regNo: cleanRegNo,
+        name: fbUser.displayName || cleanRegNo,
+        email: fbUser.email || targetEmail,
+        campusId: selectedCampus,
+        role: selectedRole,
+        notifications: [],
+        documents: [],
+      };
+
+      if (selectedRole === 'student') {
+        setStudents((prev) => [newRecord, ...prev]);
+      } else if (selectedRole === 'supervisor') {
+        setSupervisors((prev) => [...prev, newRecord]);
+      } else if (selectedRole === 'incharge') {
+        setInchargeUsers((prev) => [...prev, newRecord]);
+      } else if (selectedRole === 'hod') {
+        setHodUsers((prev) => [...prev, newRecord]);
+      }
+      match = { user: newRecord, role: selectedRole };
+
+      // Save role mapping to Firestore for persistent RBAC checks
+      await saveUserRoleToFirestore(fbUser.uid, targetEmail, selectedRole, {
+        regNo: cleanRegNo,
+        name: newRecord.name,
+      });
     }
 
-    const updatedUser = { ...match.user, role: match.role };
+    const updatedUser = { ...match.user, role: match.role, firebaseUid: fbUser.uid };
     setSelectedCampus(updatedUser.campusId || selectedCampus);
     setCurrentUser(updatedUser);
 
-    const roleTitles = {
-      student: 'Student',
-      supervisor: 'Faculty Supervisor',
-      incharge: 'Internship Incharge',
-      hod: 'Head of Department (HOD)',
-    };
-    showToast(`Welcome back, ${match.user.name}! Logged in via Firebase as ${roleTitles[match.role]}.`);
+    showToast(`Welcome back, ${match.user.name}! Logged in as ${ROLE_NAMES[match.role] || match.role}.`);
     return { success: true };
   };
 
@@ -520,8 +526,14 @@ export const PortalProvider = ({ children }) => {
       officialEmail = `${rawInput.toLowerCase()}@isbfaculty.comsats.edu.pk`;
     }
 
-    if (findAccount(officialEmail) || findAccount(cleanRegNo)) {
-      return { success: false, error: 'An account with this registration number or email already exists.' };
+    // ── DUPLICATE ACCOUNT CHECK across ALL roles ──
+    const existing = findAccount(officialEmail) || findAccount(cleanRegNo);
+    if (existing) {
+      const existingRoleName = ROLE_NAMES[existing.role] || existing.role;
+      return {
+        success: false,
+        error: `Duplicate Account Denied: Registration ID or email "${cleanRegNo}" is already registered as a ${existingRoleName}. Duplicate accounts are prohibited.`
+      };
     }
 
     // Register user in Firebase Authentication
@@ -532,6 +544,15 @@ export const PortalProvider = ({ children }) => {
     } catch (fbErr) {
       console.error('Firebase signup error:', fbErr);
       return { success: false, error: formatFirebaseError(fbErr) };
+    }
+
+    // Store user role and email in Firebase Firestore
+    if (firebaseUid) {
+      await saveUserRoleToFirestore(firebaseUid, officialEmail, userData.role, {
+        regNo: cleanRegNo,
+        name: userData.name.trim(),
+        campusId,
+      });
     }
 
     const hashed = await hashPassword(userData.password);
@@ -545,6 +566,7 @@ export const PortalProvider = ({ children }) => {
         email: officialEmail,
         password: hashed,
         campusId,
+        role: 'student',
         program: userData.program || null,
         semester: userData.semester || null,
         cgpa: null,
@@ -578,6 +600,7 @@ export const PortalProvider = ({ children }) => {
         email: officialEmail,
         password: hashed,
         campusId,
+        role: 'supervisor',
         designation: null,
         department: null,
         office: null,
@@ -646,50 +669,51 @@ export const PortalProvider = ({ children }) => {
     return findAccount(email);
   };
 
+  const resendEmailVerification = async () => {
+    try {
+      await firebaseSendEmailVerification(auth.currentUser);
+      showToast('Verification link sent to your email address! Please check your inbox.', 'info');
+      return { success: true };
+    } catch (err) {
+      const errMsg = formatFirebaseError(err) || 'Failed to send verification email.';
+      showToast(errMsg, 'error');
+      return { success: false, error: errMsg };
+    }
+  };
+
   const requestPasswordReset = async (email) => {
     if (!email || !email.trim()) {
-      return { success: false, error: 'Please enter your account email.' };
+      return { success: false, error: 'Please enter your account email address.' };
     }
 
     const cleanEmail = email.trim().toLowerCase();
     const match = findUserByEmail(cleanEmail);
 
+    let fbSuccess = false;
+    let fbError = null;
+
     try {
       await firebaseResetPassword(cleanEmail);
+      fbSuccess = true;
     } catch (fbErr) {
+      fbError = fbErr;
       console.warn('Firebase password reset notice:', fbErr);
     }
 
-    if (!match) {
+    if (!fbSuccess && !match) {
       return {
         success: false,
-        error: `No registered account found matching "${email}". Please verify your account email.`
+        error: formatFirebaseError(fbError) || `No registered account found matching "${email}". Please check your email address.`
       };
     }
 
-    const resetToken = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-    const resetTokenExpires = Date.now() + 30 * 60 * 1000;
-    const patch = { resetToken, resetTokenExpires };
-    resetTokensRef.current[match.user.id] = patch;
-
-    if (match.role === 'student') {
-      setStudents((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...patch } : s)));
-    } else if (match.role === 'supervisor') {
-      setSupervisors((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...patch } : s)));
-    } else if (match.role === 'incharge') {
-      setInchargeUsers((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...patch } : s)));
-    } else if (match.role === 'hod') {
-      setHodUsers((prev) => prev.map((s) => (s.id === match.user.id ? { ...s, ...patch } : s)));
-    }
+    showToast(`Password reset link dispatched via Firebase to ${cleanEmail}. Please check your inbox.`, 'info');
 
     return {
       success: true,
-      user: match.user,
-      role: match.role,
-      email: match.user.email || cleanEmail,
-      resetToken,
-      expiresAt: resetTokenExpires,
-      message: `Firebase password reset email sent & reset token generated for ${match.user.name}.`,
+      email: cleanEmail,
+      user: match?.user || null,
+      message: `Password reset link dispatched via Firebase to ${cleanEmail}. Please check your inbox.`,
     };
   };
 
@@ -1090,6 +1114,7 @@ export const PortalProvider = ({ children }) => {
         signup,
         logout,
         requestPasswordReset,
+        resendEmailVerification,
         resetPassword,
         updateUserProfile,
         switchRole,

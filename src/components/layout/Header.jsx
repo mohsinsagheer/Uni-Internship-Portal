@@ -11,7 +11,7 @@ import {
 import { usePortal } from '../../context/PortalContext';
 
 export default function Header({ onOpenAuth }) {
-  const { currentUser } = usePortal();
+  const { currentUser, logout } = usePortal();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -114,47 +114,74 @@ export default function Header({ onOpenAuth }) {
             <div className={`w-px bg-white/20 transition-all ${scrolled ? 'h-6' : 'h-8'}`}></div>
 
             {/* ── Executive Profile Card ── */}
-            <div className="flex items-center gap-3 rounded-2xl bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/25 shadow-lg transition-all min-w-0 px-3 py-1.5 sm:px-3.5 sm:py-2">
-              {/* Identity: Avatar + Name + Designation */}
-              <div className="flex items-center gap-3">
-                <div className="relative shrink-0">
-                  <div
-                    className={`rounded-xl overflow-hidden border-2 border-[#c29b38] shadow-md transition-all ${
-                      scrolled ? 'w-8 h-8' : 'w-10 h-10 sm:w-11 sm:h-11'
-                    }`}
-                  >
-                    <img
-                      src={
-                        currentUser?.avatar ||
-                        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80'
-                      }
-                      alt={currentUser?.name}
-                      className="w-full h-full object-cover"
-                    />
+            {currentUser ? (
+              <div className="flex items-center gap-3 rounded-2xl bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/25 shadow-lg transition-all min-w-0 px-3 py-1.5 sm:px-3.5 sm:py-2">
+                {/* Identity: Avatar + Name + Designation */}
+                <div className="flex items-center gap-3">
+                  <div className="relative shrink-0">
+                    <div
+                      className={`rounded-xl overflow-hidden border-2 border-[#c29b38] shadow-md transition-all ${
+                        scrolled ? 'w-8 h-8' : 'w-10 h-10 sm:w-11 sm:h-11'
+                      }`}
+                    >
+                      <img
+                        src={
+                          currentUser?.avatar ||
+                          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80'
+                        }
+                        alt={currentUser?.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border border-[#001736] shadow-sm"></span>
                   </div>
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border border-[#001736] shadow-sm"></span>
-                </div>
 
-                <div className="flex min-w-0 max-w-[9rem] sm:max-w-[11rem] flex-col justify-center">
-                  <span className="font-serif font-black text-white tracking-wide text-xs sm:text-base leading-tight truncate">
-                    {currentUser?.name}
-                  </span>
-                  <span className="text-[#facc15] font-semibold text-[10px] sm:text-[11px] leading-tight truncate">
-                    {userDesignation}
-                  </span>
+                  <div className="flex min-w-0 max-w-[9rem] sm:max-w-[11rem] flex-col justify-center">
+                    <span className="font-serif font-black text-white tracking-wide text-xs sm:text-base leading-tight truncate">
+                      {currentUser?.name}
+                    </span>
+                    <span className="text-[#facc15] font-semibold text-[10px] sm:text-[11px] leading-tight truncate">
+                      {userDesignation}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="hidden sm:flex flex-col text-right pr-2">
+                <span className="text-white font-bold text-xs">Not Signed In</span>
+                <span className="text-[#facc15] text-[10px]">Firebase Auth Required</span>
+              </div>
+            )}
 
-            {/* ── Account Button ── */}
-            <button
-              onClick={onOpenAuth}
-              className="px-3 sm:px-3.5 flex items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-[#c29b38] to-[#dfb853] hover:from-[#b38d2f] hover:to-[#c29b38] text-[#001530] font-black rounded-xl transition-all shadow-md hover:shadow-lg border border-[#c29b38]/60 shrink-0 active:scale-95 h-8 sm:h-9 text-xs sm:text-sm"
-              title="Account Settings & Session Switch"
-            >
-              <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Account</span>
-            </button>
+            {/* ── Account / Logout Actions ── */}
+            {currentUser ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onOpenAuth}
+                  className="px-3 sm:px-3.5 flex items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-[#c29b38] to-[#dfb853] hover:from-[#b38d2f] hover:to-[#c29b38] text-[#001530] font-black rounded-xl transition-all shadow-md hover:shadow-lg border border-[#c29b38]/60 shrink-0 active:scale-95 h-8 sm:h-9 text-xs sm:text-sm"
+                  title="Account Details"
+                >
+                  <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Account</span>
+                </button>
+                <button
+                  onClick={logout}
+                  className="px-3 sm:px-3.5 flex items-center gap-1.5 bg-red-600/80 hover:bg-red-600 text-white font-bold rounded-xl transition-all shadow-md border border-red-400/40 shrink-0 active:scale-95 h-8 sm:h-9 text-xs sm:text-sm"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onOpenAuth}
+                className="px-4 py-2 flex items-center gap-2 bg-gradient-to-r from-[#c29b38] via-[#e5c158] to-[#c29b38] text-[#001530] font-black rounded-xl shadow-lg hover:shadow-xl border border-[#facc15] active:scale-95 text-xs sm:text-sm uppercase tracking-wider"
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>Sign In / Register</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
