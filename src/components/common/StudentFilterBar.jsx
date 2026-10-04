@@ -153,9 +153,8 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
               <button
                 key={opt.id}
                 onClick={() => setSubmissionFilter(opt.id)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-semibold border transition-all ${
-                  isSelected ? opt.activeColor : opt.color
-                }`}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-semibold border transition-all ${isSelected ? opt.activeColor : opt.color
+                  }`}
               >
                 <Icon className="w-3.5 h-3.5 shrink-0" />
                 <span>{opt.label}</span>
