@@ -28,7 +28,6 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
     {
       id: 'all',
       label: 'All Students',
-      count: stats.totalStudents,
       icon: Users,
       color: 'border-slate-300 text-slate-700 bg-white hover:bg-slate-50',
       activeColor: 'bg-cui-navy text-white border-cui-navy',
@@ -36,7 +35,6 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
     {
       id: 'pending_submission',
       label: 'Pending Document Submission',
-      count: stats.pendingSubmission,
       icon: AlertCircle,
       color: 'border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100',
       activeColor: 'bg-amber-600 text-white border-amber-600 shadow-sm',
@@ -45,7 +43,6 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
     {
       id: 'pending_supervisor',
       label: 'Pending Supervisor Review',
-      count: stats.pendingSupervisor,
       icon: Clock,
       color: 'border-sky-300 text-sky-900 bg-sky-50 hover:bg-sky-100',
       activeColor: 'bg-sky-600 text-white border-sky-600 shadow-sm',
@@ -53,7 +50,6 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
     {
       id: 'pending_incharge',
       label: 'Pending Incharge Endorsement',
-      count: stats.pendingIncharge,
       icon: UserCheck,
       color: 'border-indigo-300 text-indigo-900 bg-indigo-50 hover:bg-indigo-100',
       activeColor: 'bg-indigo-600 text-white border-indigo-600 shadow-sm',
@@ -61,7 +57,6 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
     {
       id: 'pending_hod',
       label: 'Pending HOD Approval',
-      count: stats.pendingHod,
       icon: ShieldCheck,
       color: 'border-purple-300 text-purple-900 bg-purple-50 hover:bg-purple-100',
       activeColor: 'bg-purple-700 text-white border-purple-700 shadow-sm',
@@ -69,7 +64,6 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
     {
       id: 'completed',
       label: 'Completed & Endorsed',
-      count: stats.completed,
       icon: CheckCircle2,
       color: 'border-emerald-300 text-emerald-900 bg-emerald-50 hover:bg-emerald-100',
       activeColor: 'bg-emerald-700 text-white border-emerald-700 shadow-sm',
@@ -77,7 +71,6 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
     {
       id: 'supervisor_endorsed',
       label: 'Supervisor Endorsed',
-      count: stats.supervisorEndorsed,
       icon: CheckCircle2,
       color: 'border-teal-300 text-teal-900 bg-teal-50 hover:bg-teal-100',
       activeColor: 'bg-teal-700 text-white border-teal-700 shadow-sm',
@@ -166,15 +159,6 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
               >
                 <Icon className="w-3.5 h-3.5 shrink-0" />
                 <span>{opt.label}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                    isSelected
-                      ? 'bg-white/25 text-white'
-                      : 'bg-black/10 text-slate-800'
-                  }`}
-                >
-                  {opt.count}
-                </span>
                 {opt.badge && !isSelected && (
                   <span className="text-[9px] bg-red-500 text-white font-bold px-1.5 py-0.2 rounded-full uppercase tracking-tighter">
                     {opt.badge}
