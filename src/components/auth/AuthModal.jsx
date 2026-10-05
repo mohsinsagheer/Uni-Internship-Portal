@@ -200,7 +200,12 @@ export default function AuthModal({ isOpen, onClose }) {
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-3 sm:p-4 overflow-y-auto animate-fade-in">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-3 sm:p-4 overflow-y-auto animate-fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-label="CUOnline authentication"
+    >
       <div className="bg-white rounded-[28px] shadow-[0_25px_60px_-15px_rgba(0,25,60,0.55)] border border-slate-200/80 w-full max-w-2xl max-h-[92vh] overflow-y-auto my-3 sm:my-6">
 
         {/* ── Top University Branding Header ── */}
@@ -234,9 +239,9 @@ export default function AuthModal({ isOpen, onClose }) {
               <button
                 onClick={onClose}
                 className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors border border-white/10 shrink-0"
-                title="Close"
+                aria-label="Close authentication dialog"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             ) : (
               <span className="text-[10px] font-black text-[#facc15] bg-[#001736] border border-[#c29b38]/60 px-3 py-1.5 rounded-xl uppercase tracking-wider shrink-0">
@@ -280,15 +285,23 @@ export default function AuthModal({ isOpen, onClose }) {
 
         <div className="p-4 sm:p-6 space-y-4 text-[13px] sm:text-[14px]">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm p-3.5 rounded-2xl flex items-center gap-2.5 font-medium animate-fade-in">
-              <span className="font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded-lg text-xs">Error</span>
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm p-3.5 rounded-2xl flex items-center gap-2.5 font-medium animate-fade-in"
+            >
+              <span className="font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded-lg text-xs" aria-hidden="true">Error</span>
               <span>{error}</span>
             </div>
           )}
 
           {infoMessage && (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm p-3.5 rounded-2xl flex items-center gap-2.5 font-medium animate-fade-in">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div
+              role="status"
+              aria-live="polite"
+              className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm p-3.5 rounded-2xl flex items-center gap-2.5 font-medium animate-fade-in"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
               <span>{infoMessage}</span>
             </div>
           )}
@@ -296,10 +309,10 @@ export default function AuthModal({ isOpen, onClose }) {
           {/* ── Role Selector Pill Grid (shown on login and signup) ── */}
           {(activeTab === 'login' || activeTab === 'signup') && (
             <div>
-              <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-[0.16em] mb-2">
+              <p className="block text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-[0.16em] mb-2" id="role-group-label">
                 Select Your Official Designation
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="group" aria-labelledby="role-group-label">
                 {rolesList.map((r) => {
                   const IconComponent = r.icon;
                   const isSelected = role === r.id;
@@ -308,12 +321,13 @@ export default function AuthModal({ isOpen, onClose }) {
                       key={r.id}
                       type="button"
                       onClick={() => setRole(r.id)}
-                      className={`py-2 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 transition-all text-[11px] sm:text-xs font-bold ${isSelected
+                      aria-pressed={isSelected}
+                      className={`py-2 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 transition-colors text-[11px] sm:text-xs font-bold ${isSelected
                         ? 'bg-[#002147] text-white border-[#c29b38] shadow-md ring-2 ring-[#c29b38]/40'
                         : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                         }`}
                     >
-                      <IconComponent className={`w-3.5 h-3.5 ${isSelected ? 'text-[#facc15]' : 'text-slate-500'}`} />
+                      <IconComponent className={`w-3.5 h-3.5 ${isSelected ? 'text-[#facc15]' : 'text-slate-500'}`} aria-hidden="true" />
                       <span>{r.label}</span>
                     </button>
                   );
@@ -325,18 +339,17 @@ export default function AuthModal({ isOpen, onClose }) {
           {/* ── Campus Selector (shown on login and signup) ── */}
           {(activeTab === 'login' || activeTab === 'signup') && (
             <div>
-              <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-[0.16em] mb-2">
+              <label htmlFor="campus-select" className="block text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-[0.16em] mb-2">
                 Select Campus Location
               </label>
               <select
+                id="campus-select"
                 value={selectedCampus}
                 onChange={(e) => setSelectedCampus(e.target.value)}
                 className="w-full text-xs sm:text-sm px-3.5 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002147] bg-white text-slate-800 font-semibold shadow-sm"
               >
                 {campuses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
@@ -346,20 +359,18 @@ export default function AuthModal({ isOpen, onClose }) {
           {activeTab === 'login' && (
             <form onSubmit={handleLoginSubmit} className="space-y-4 pt-1 animate-fade-in">
               <div>
-                <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label htmlFor="login-identifier" className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   {role === 'student' ? 'Student Registration Number:' : 'Account Email:'}
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" aria-hidden="true" />
                   <input
-                    type="text"
+                    id="login-identifier"
+                    type={role === 'student' ? 'text' : 'email'}
                     value={regNo}
                     onChange={(e) => setRegNo(e.target.value)}
-                    placeholder={
-                      role === 'student'
-                        ? 'e.g. FA21-BCS-045'
-                        : 'e.g. faculty@isbfaculty.comsats.edu.pk'
-                    }
+                    placeholder={role === 'student' ? 'e.g. FA21-BCS-045' : 'e.g. faculty@isbfaculty.comsats.edu.pk'}
+                    autoComplete={role === 'student' ? 'username' : 'email'}
                     className="w-full pl-10 pr-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002147] font-mono font-bold text-slate-800 shadow-sm"
                   />
                 </div>
@@ -367,44 +378,48 @@ export default function AuthModal({ isOpen, onClose }) {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  <label htmlFor="login-password" className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Portal Password:
                   </label>
                   <button
                     type="button"
                     onClick={() => switchTab('forgot')}
                     className="text-[11px] sm:text-xs font-bold text-[#c29b38] hover:text-[#002147] transition-colors flex items-center gap-1 hover:underline"
+                    aria-label="Go to forgot password form"
                   >
-                    <KeyRound className="w-3 h-3" />
+                    <KeyRound className="w-3 h-3" aria-hidden="true" />
                     <span>Forgot Password?</span>
                   </button>
                 </div>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" aria-hidden="true" />
                   <input
+                    id="login-password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your confidential account password"
+                    autoComplete="current-password"
                     className="w-full pl-10 pr-10 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002147] text-slate-800 shadow-sm font-medium"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
                     className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                    title={showPassword ? 'Hide password' : 'Show password'}
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
                   </button>
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full mt-2 py-3 bg-gradient-to-r from-[#002147] via-[#0a3264] to-[#002147] hover:from-[#001738] hover:to-[#06244a] text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border border-[#c29b38]/40 group active:scale-[0.99]"
+                className="w-full mt-2 py-3 bg-gradient-to-r from-[#002147] via-[#0a3264] to-[#002147] hover:from-[#001738] hover:to-[#06244a] text-white font-black text-xs sm:text-sm rounded-xl transition-colors shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border border-[#c29b38]/40 group active:scale-[0.99]"
               >
                 <span>Sign In to CUOnline Portal</span>
-                <ArrowRight className="w-4 h-4 text-[#facc15] group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="w-4 h-4 text-[#facc15] group-hover:translate-x-1 transition-transform" aria-hidden="true" />
               </button>
             </form>
           )}

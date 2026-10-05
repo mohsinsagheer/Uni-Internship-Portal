@@ -85,20 +85,23 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         {/* Search Input */}
         <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
           <input
-            type="text"
+            id="student-search"
+            type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by student name, roll no, company..."
+            aria-label="Search students by name, registration number, or company"
             className="w-full pl-9 pr-8 py-1.5 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-cui-navy text-slate-800 bg-slate-50/50"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -140,12 +143,12 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
 
       {/* Category / Status Filter Pills */}
       <div>
-        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-          <Filter className="w-3.5 h-3.5 text-cui-navy" />
-          <span>Filter by Submission & Clearance Status:</span>
+        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5" aria-hidden="true">
+          <Filter className="w-3.5 h-3.5 text-cui-navy" aria-hidden="true" />
+          <span>Filter by Submission &amp; Clearance Status:</span>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter students by submission and clearance status">
           {filterOptions.map((opt) => {
             const Icon = opt.icon;
             const isSelected = submissionFilter === opt.id;
@@ -153,13 +156,13 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
               <button
                 key={opt.id}
                 onClick={() => setSubmissionFilter(opt.id)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-semibold border transition-all ${isSelected ? opt.activeColor : opt.color
-                  }`}
+                aria-pressed={isSelected}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${isSelected ? opt.activeColor : opt.color}`}
               >
-                <Icon className="w-3.5 h-3.5 shrink-0" />
+                <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                 <span>{opt.label}</span>
                 {opt.badge && !isSelected && (
-                  <span className="text-[9px] bg-red-500 text-white font-bold px-1.5 py-0.2 rounded-full uppercase tracking-tighter">
+                  <span className="text-[9px] bg-red-500 text-white font-bold px-1.5 py-0.5 rounded-full uppercase tracking-tighter" aria-hidden="true">
                     {opt.badge}
                   </span>
                 )}

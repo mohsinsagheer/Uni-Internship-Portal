@@ -2,11 +2,42 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23002147'/><circle cx='50' cy='50' r='40' fill='none' stroke='%23c29b38' stroke-width='3'/><path d='M50 20 L58 36 L76 38 L62 50 L66 68 L50 58 L34 68 L38 50 L24 38 L42 36 Z' fill='%23c29b38'/><text x='50' y='82' text-anchor='middle' fill='%23ffffff' font-size='11' font-family='Arial' font-weight='bold'>CUI SIS</text></svg>" />
+
+    <!-- Viewport -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CUOnline - Internship Management Portal | COMSATS University Islamabad</title>
-    <script type="module" crossorigin src="/assets/index-Cx42yTS0.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DYYtiHV5.css">
+
+    <!-- Primary SEO Meta -->
+    <title>CUOnline – Internship Management Portal | COMSATS University Islamabad</title>
+    <meta name="description" content="CUOnline Internship & Corporate Placement Portal for COMSATS University Islamabad. Manage internship clearances, document submissions, supervisor endorsements, and HOD approvals online." />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#002147" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="CUOnline Internship Management Portal | COMSATS University Islamabad" />
+    <meta property="og:description" content="Official internship clearance and document management system for COMSATS University students and faculty." />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_PK" />
+
+    <!-- Favicon (inline SVG — zero network request) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23002147'/><circle cx='50' cy='50' r='40' fill='none' stroke='%23c29b38' stroke-width='3'/><path d='M50 20 L58 36 L76 38 L62 50 L66 68 L50 58 L34 68 L38 50 L24 38 L42 36 Z' fill='%23c29b38'/><text x='50' y='82' text-anchor='middle' fill='%23ffffff' font-size='11' font-family='Arial' font-weight='bold'>CUI SIS</text></svg>" />
+
+    <!-- Preload critical assets — logo is LCP image in Header -->
+    <link rel="preload" as="image" href="/cui-logo.png" fetchpriority="high" />
+
+    <!-- DNS preconnect for external image hosts (Unsplash avatars used in seed data) -->
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
+    <link rel="dns-prefetch" href="https://images.unsplash.com" />
+
+    <!-- Firebase auth domain preconnect -->
+    <link rel="preconnect" href="https://internsip-docs-portal.firebaseapp.com" crossorigin />
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="dns-prefetch" href="https://www.gstatic.com" />
+    <script type="module" crossorigin src="/assets/index-CQz6rLuZ.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-C0FnF6B9.js">
+    <link rel="modulepreload" crossorigin href="/assets/icons-B33EtCSp.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-D7LucxSx.js">
+    <link rel="modulepreload" crossorigin href="/assets/firebase-BNVZtWUU.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-BmT_gtwS.css">
   </head>
   <body class="bg-[#f0f4f8] text-slate-800 antialiased min-h-screen">
     <div id="root"></div>

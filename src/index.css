@@ -60,6 +60,7 @@ a {
   0% {
     transform: translateX(100%);
   }
+
   100% {
     transform: translateX(-100%);
   }
@@ -81,6 +82,7 @@ a {
     opacity: 0;
     transform: translateY(5px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -88,10 +90,12 @@ a {
 }
 
 @keyframes emblemFloat {
+
   0%,
   100% {
     transform: translate3d(0, 0, 0) rotate(0deg);
   }
+
   50% {
     transform: translate3d(0, -2px, 0) rotate(0.5deg);
   }
@@ -102,6 +106,7 @@ a {
     opacity: 0;
     transform: translate3d(-8px, 0, 0);
   }
+
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
@@ -109,10 +114,12 @@ a {
 }
 
 @keyframes noticeGlow {
+
   0%,
   100% {
     box-shadow: 0 2px 8px rgba(148, 163, 184, 0.12);
   }
+
   50% {
     box-shadow: 0 4px 16px rgba(93, 142, 196, 0.24);
   }
@@ -120,9 +127,7 @@ a {
 
 .animate-fade-in {
   animation: fadeIn 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
-  backface-visibility: hidden;
-  transform: translateZ(0);
-  will-change: opacity, transform;
+  /* No will-change: animation runs once, promoting to GPU layer wastes memory */
 }
 
 .portal-emblem {
@@ -132,7 +137,7 @@ a {
 
 .portal-nav-item {
   animation: navReveal 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
-  will-change: opacity, transform;
+  /* No will-change: animation is one-shot on mount */
 }
 
 .portal-nav-item:nth-child(2) {
@@ -183,6 +188,7 @@ a {
   line-height: 1.65;
   font-size: 0.925rem;
 }
+
 .docx-preview-sheet h1 {
   font-size: 1.5rem;
   font-weight: 800;
@@ -192,6 +198,7 @@ a {
   border-bottom: 2px solid #e2e8f0;
   padding-bottom: 0.35rem;
 }
+
 .docx-preview-sheet h2 {
   font-size: 1.25rem;
   font-weight: 700;
@@ -199,6 +206,7 @@ a {
   margin-top: 1rem;
   margin-bottom: 0.5rem;
 }
+
 .docx-preview-sheet h3 {
   font-size: 1.1rem;
   font-weight: 600;
@@ -206,39 +214,45 @@ a {
   margin-top: 0.75rem;
   margin-bottom: 0.35rem;
 }
+
 .docx-preview-sheet p {
   margin-bottom: 0.75rem;
 }
+
 .docx-preview-sheet table {
   width: 100%;
   border-collapse: collapse;
   margin: 1rem 0;
   font-size: 0.85rem;
 }
+
 .docx-preview-sheet th,
 .docx-preview-sheet td {
   border: 1px solid #cbd5e1;
   padding: 0.5rem 0.75rem;
   text-align: left;
 }
+
 .docx-preview-sheet th {
   background-color: #f8fafc;
   font-weight: 700;
   color: #002147;
 }
+
 .docx-preview-sheet ul {
   list-style-type: disc;
   padding-left: 1.5rem;
   margin-bottom: 0.75rem;
 }
+
 .docx-preview-sheet ol {
   list-style-type: decimal;
   padding-left: 1.5rem;
   margin-bottom: 0.75rem;
 }
+
 .docx-preview-sheet strong,
 .docx-preview-sheet b {
   font-weight: 700;
   color: #0f172a;
 }
-

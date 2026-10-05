@@ -1,19 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense, memo } from 'react';
 import Header from './components/layout/Header';
 import NewsTicker from './components/layout/NewsTicker';
 import Sidebar from './components/layout/Sidebar';
 import Footer from './components/layout/Footer';
 import AuthModal from './components/auth/AuthModal';
-import SignatureModal from './components/common/SignatureModal';
-import DocumentViewerModal from './components/common/DocumentViewerModal';
-import InternshipDirectivesPage from './components/common/InternshipDirectivesPage';
-import ProfileCompletionModal from './components/common/ProfileCompletionModal';
-import StudentDashboard from './components/student/StudentDashboard';
-import FacultyDashboard from './components/faculty/FacultyDashboard';
-import InchargeDashboard from './components/incharge/InchargeDashboard';
-import HodDashboard from './components/hod/HodDashboard';
 import { usePortal } from './context/PortalContext';
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
+
+// Heavy role-dashboards: lazy-loaded so they only download after login
+const StudentDashboard = lazy(() => import('./components/student/StudentDashboard'));
+const FacultyDashboard = lazy(() => import('./components/faculty/FacultyDashboard'));
+const InchargeDashboard = lazy(() => import('./components/incharge/InchargeDashboard'));
+const HodDashboard = lazy(() => import('./components/hod/HodDashboard'));
+
+// Modals that are rarely needed: lazy-loaded on demand
+const SignatureModal = lazy(() => import('./components/common/SignatureModal'));
+const DocumentViewerModal = lazy(() => import('./components/common/DocumentViewerModal'));
+const InternshipDirectivesPage = lazy(() => import('./components/common/InternshipDirectivesPage'));
+const ProfileCompletionModal = lazy(() => import('./components/common/ProfileCompletionModal'));
+
+// Simple loading skeleton shown while lazy chunks download
+function DashboardSkeleton() {
+  return (
+    <div className="flex-1 w-full animate-pulse space-y-4 pt-2" aria-busy="true" aria-label="Loading dashboard">
+      <div className="h-32 bg-slate-200 rounded-2xl" />
+      <div className="h-20 bg-slate-200 rounded-2xl" />
+      <div className="h-48 bg-slate-200 rounded-2xl" />
+    </div>
+  );
+}
+
+// Toast rendered as a memoized component to avoid re-renders from unrelated state
+const Toast = memo(function Toast({ toastMessage }) {
+  if (!toastMessage) return null;
+  return (
+    <div
+      className="fixed top-4 right-4 z-[60] animate-fade-in"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div
+        className={`px-4 py-3 rounded-lg shadow-xl text-xs font-semibold flex items-center gap-2 border max-w-xs ${toastMessage.type === 'error'
+          ? 'bg-red-50 border-red-200 text-red-800'
+          : toastMessage.type === 'info'
+            ? 'bg-sky-50 border-sky-200 text-sky-800'
+            : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+          }`}
+      >
+        {toastMessage.type === 'error' ? (
+          <AlertCircle className="w-4 h-4 text-red-600 shrink-0" aria-hidden="true" />
+        ) : toastMessage.type === 'info' ? (
+          <Info className="w-4 h-4 text-sky-600 shrink-0" aria-hidden="true" />
+        ) : (
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
+        )}
+        <span>{toastMessage.message}</span>
+      </div>
+    </div>
+  );
+});
 
 export default function App() {
   const {
@@ -22,7 +68,7 @@ export default function App() {
     setSignatureModalConfig,
     viewingDocument,
     setViewingDocument,
-    toastMessage
+    toastMessage,
   } = usePortal();
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -31,33 +77,27 @@ export default function App() {
 
   const prevUserRef = React.useRef(currentUser);
 
-  // Open auth modal when user logs out (goes from authenticated -> null)
-  // Close it and go to dashboard when user logs in (goes from null -> authenticated)
   useEffect(() => {
     const wasLoggedIn = !!prevUserRef.current;
     const isLoggedIn = !!currentUser;
     prevUserRef.current = currentUser;
 
     if (isLoggedIn) {
-      // User just logged in or already logged in — close modal, show dashboard
       setAuthModalOpen(false);
       setActiveTab('dashboard');
     } else if (wasLoggedIn && !isLoggedIn) {
-      // User just logged out — show auth modal
       setAuthModalOpen(true);
     }
-    // If both null (initial load with no session), authModalOpen initializes as !currentUser (true)
   }, [currentUser]);
 
-  // Check if current user is newly created with null profile info
   useEffect(() => {
     if (currentUser?.needsProfileCompletion) {
       setProfileModalOpen(true);
     }
   }, [currentUser?.id, currentUser?.needsProfileCompletion]);
 
-  // Helper to open signature modal
-  const handleOpenSignatureModal = (signerRole, targetStudent, targetDoc, onSigned = null) => {
+  // Stable callbacks so child components don't re-render when parent re-renders
+  const handleOpenSignatureModal = useCallback((signerRole, targetStudent, targetDoc, onSigned = null) => {
     setSignatureModalConfig({
       isOpen: true,
       signerRole,
@@ -66,60 +106,38 @@ export default function App() {
       targetDoc,
       onSigned: onSigned || targetDoc?.onSigned,
     });
-  };
+  }, [setSignatureModalConfig]);
 
-  const handleCloseSignatureModal = () => {
+  const handleCloseSignatureModal = useCallback(() => {
     setSignatureModalConfig(null);
-  };
+  }, [setSignatureModalConfig]);
 
-  const handleSaveSignature = (signatureDataUrl, note = '') => {
+  const handleSaveSignature = useCallback((signatureDataUrl, note = '') => {
     if (signatureModalConfig?.onSigned) {
       signatureModalConfig.onSigned(signatureDataUrl, note);
     }
     setSignatureModalConfig(null);
-  };
+  }, [signatureModalConfig, setSignatureModalConfig]);
 
-  // Helper to open document viewer
-  const handleOpenDocumentViewer = (student, doc) => {
-    setViewingDocument({
-      isOpen: true,
-      student,
-      doc,
-    });
-  };
+  const handleOpenDocumentViewer = useCallback((student, doc) => {
+    setViewingDocument({ isOpen: true, student, doc });
+  }, [setViewingDocument]);
 
-  const handleCloseDocumentViewer = () => {
+  const handleCloseDocumentViewer = useCallback(() => {
     setViewingDocument(null);
-  };
+  }, [setViewingDocument]);
+
+  const openAuth = useCallback(() => setAuthModalOpen(true), []);
+  const closeAuth = useCallback(() => setAuthModalOpen(false), []);
+  const closeProfile = useCallback(() => setProfileModalOpen(false), []);
+  const goBack = useCallback(() => setActiveTab('dashboard'), []);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f1f5f9] text-slate-800">
-      {/* Toast Notification Alert */}
-      {toastMessage && (
-        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-3 duration-200">
-          <div
-            className={`px-4 py-3 rounded-lg shadow-xl text-xs font-semibold flex items-center gap-2 border ${
-              toastMessage.type === 'error'
-                ? 'bg-red-50 border-red-200 text-red-800'
-                : toastMessage.type === 'info'
-                ? 'bg-sky-50 border-sky-200 text-sky-800'
-                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-            }`}
-          >
-            {toastMessage.type === 'error' ? (
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-            ) : toastMessage.type === 'info' ? (
-              <Info className="w-4 h-4 text-sky-600 shrink-0" />
-            ) : (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            )}
-            <span>{toastMessage.message}</span>
-          </div>
-        </div>
-      )}
+      <Toast toastMessage={toastMessage} />
 
       {/* Official Top Bar */}
-      <Header onOpenAuth={() => setAuthModalOpen(true)} />
+      <Header onOpenAuth={openAuth} />
 
       {/* COMSATS SIS Scrolling News Ticker */}
       <NewsTicker />
@@ -131,48 +149,50 @@ export default function App() {
           <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
           {/* Right Column: Role Dashboards or Directives Page */}
-          <div key={`${currentUser?.role}-${activeTab}`} className="flex-1 w-full min-w-0 overflow-hidden animate-fade-in">
-            {activeTab === 'directives' ? (
-              <InternshipDirectivesPage onBack={() => setActiveTab('dashboard')} />
-            ) : (
-              <>
-                {currentUser?.role === 'student' && (
-                  <StudentDashboard
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    onOpenSignatureModal={handleOpenSignatureModal}
-                    onOpenDocumentViewer={handleOpenDocumentViewer}
-                  />
-                )}
-
-                {currentUser?.role === 'supervisor' && (
-                  <FacultyDashboard
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    onOpenSignatureModal={handleOpenSignatureModal}
-                    onOpenDocumentViewer={handleOpenDocumentViewer}
-                  />
-                )}
-
-                {currentUser?.role === 'incharge' && (
-                  <InchargeDashboard
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    onOpenSignatureModal={handleOpenSignatureModal}
-                    onOpenDocumentViewer={handleOpenDocumentViewer}
-                  />
-                )}
-
-                {currentUser?.role === 'hod' && (
-                  <HodDashboard
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    onOpenSignatureModal={handleOpenSignatureModal}
-                    onOpenDocumentViewer={handleOpenDocumentViewer}
-                  />
-                )}
-              </>
-            )}
+          <div
+            key={`${currentUser?.role}-${activeTab}`}
+            className="flex-1 w-full min-w-0 overflow-hidden animate-fade-in"
+          >
+            <Suspense fallback={<DashboardSkeleton />}>
+              {activeTab === 'directives' ? (
+                <InternshipDirectivesPage onBack={goBack} />
+              ) : (
+                <>
+                  {currentUser?.role === 'student' && (
+                    <StudentDashboard
+                      activeTab={activeTab}
+                      setActiveTab={setActiveTab}
+                      onOpenSignatureModal={handleOpenSignatureModal}
+                      onOpenDocumentViewer={handleOpenDocumentViewer}
+                    />
+                  )}
+                  {currentUser?.role === 'supervisor' && (
+                    <FacultyDashboard
+                      activeTab={activeTab}
+                      setActiveTab={setActiveTab}
+                      onOpenSignatureModal={handleOpenSignatureModal}
+                      onOpenDocumentViewer={handleOpenDocumentViewer}
+                    />
+                  )}
+                  {currentUser?.role === 'incharge' && (
+                    <InchargeDashboard
+                      activeTab={activeTab}
+                      setActiveTab={setActiveTab}
+                      onOpenSignatureModal={handleOpenSignatureModal}
+                      onOpenDocumentViewer={handleOpenDocumentViewer}
+                    />
+                  )}
+                  {currentUser?.role === 'hod' && (
+                    <HodDashboard
+                      activeTab={activeTab}
+                      setActiveTab={setActiveTab}
+                      onOpenSignatureModal={handleOpenSignatureModal}
+                      onOpenDocumentViewer={handleOpenDocumentViewer}
+                    />
+                  )}
+                </>
+              )}
+            </Suspense>
           </div>
         </div>
       </main>
@@ -181,39 +201,39 @@ export default function App() {
       <Footer onOpenDirectives={() => setActiveTab('directives')} />
 
       {/* Authentication & User Switching Modal */}
-      <AuthModal
-        isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-      />
+      <AuthModal isOpen={authModalOpen} onClose={closeAuth} />
 
-      {/* Immediate Profile Completion Modal for New Accounts */}
-      <ProfileCompletionModal
-        isOpen={profileModalOpen}
-        onClose={() => setProfileModalOpen(false)}
-      />
+      {/* Lazy-loaded modals — only mount when needed */}
+      <Suspense fallback={null}>
+        {profileModalOpen && (
+          <ProfileCompletionModal isOpen={profileModalOpen} onClose={closeProfile} />
+        )}
+      </Suspense>
 
-      {/* Interactive Signature Modal (Canvas Draw vs Image Upload) */}
-      {signatureModalConfig && (
-        <SignatureModal
-          isOpen={signatureModalConfig.isOpen}
-          onClose={handleCloseSignatureModal}
-          signerRole={signatureModalConfig.signerRole}
-          targetStudent={signatureModalConfig.targetStudent}
-          documentTitle={signatureModalConfig.documentTitle}
-          onSaveSignature={handleSaveSignature}
-        />
-      )}
+      <Suspense fallback={null}>
+        {signatureModalConfig && (
+          <SignatureModal
+            isOpen={signatureModalConfig.isOpen}
+            onClose={handleCloseSignatureModal}
+            signerRole={signatureModalConfig.signerRole}
+            targetStudent={signatureModalConfig.targetStudent}
+            documentTitle={signatureModalConfig.documentTitle}
+            onSaveSignature={handleSaveSignature}
+          />
+        )}
+      </Suspense>
 
-      {/* Official Document Letterhead Viewer Modal */}
-      {viewingDocument && (
-        <DocumentViewerModal
-          isOpen={viewingDocument.isOpen}
-          onClose={handleCloseDocumentViewer}
-          student={viewingDocument.student}
-          document={viewingDocument.doc}
-          onOpenSignatureModal={handleOpenSignatureModal}
-        />
-      )}
+      <Suspense fallback={null}>
+        {viewingDocument && (
+          <DocumentViewerModal
+            isOpen={viewingDocument.isOpen}
+            onClose={handleCloseDocumentViewer}
+            student={viewingDocument.student}
+            document={viewingDocument.doc}
+            onOpenSignatureModal={handleOpenSignatureModal}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }
