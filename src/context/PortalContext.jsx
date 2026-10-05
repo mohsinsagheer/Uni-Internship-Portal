@@ -193,6 +193,13 @@ export const PortalProvider = ({ children }) => {
     return null;
   });
 
+  // Ref always holds the latest state values for use in callbacks
+  const latestStudents = useRef([]);
+  const latestSupervisors = useRef([]);
+  const latestInchargeUsers = useRef([]);
+  const latestHodUsers = useRef([]);
+  const latestCurrentUser = useRef(null);
+
   const [submissionFilter, setSubmissionFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSupervisorFilter, setSelectedSupervisorFilter] = useState('all');
@@ -284,18 +291,46 @@ export const PortalProvider = ({ children }) => {
     }
   }, [currentUser]);
 
-  // Firebase Auth State Listener
+  // Keep refs in sync so onAuthStateChanged closure always sees latest state
+  useEffect(() => { latestStudents.current = students; }, [students]);
+  useEffect(() => { latestSupervisors.current = supervisors; }, [supervisors]);
+  useEffect(() => { latestInchargeUsers.current = inchargeUsers; }, [inchargeUsers]);
+  useEffect(() => { latestHodUsers.current = hodUsers; }, [hodUsers]);
+  useEffect(() => { latestCurrentUser.current = currentUser; }, [currentUser]);
+
+  // Firebase Auth State Listener — only runs on mount, uses refs for latest state
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((fbUser) => {
+    const unsubscribe = auth.onAuthStateChanged(async (fbUser) => {
+      // If a currentUser is already set (login() already handled it), do nothing
+      if (latestCurrentUser.current) return;
+
       if (fbUser && fbUser.email) {
-        const found = findUserByEmail(fbUser.email);
-        if (found) {
-          setCurrentUser((prev) => prev || { ...found.user, role: found.role, firebaseUid: fbUser.uid });
+        try {
+          const firestoreData = await getUserRoleFromFirestore(fbUser.uid);
+          // Search across all role arrays using latest ref values
+          const allUsers = [
+            ...latestStudents.current.map(u => ({ user: u, role: 'student' })),
+            ...latestSupervisors.current.map(u => ({ user: u, role: 'supervisor' })),
+            ...latestInchargeUsers.current.map(u => ({ user: u, role: 'incharge' })),
+            ...latestHodUsers.current.map(u => ({ user: u, role: 'hod' })),
+          ];
+          const found = allUsers.find(({ user }) => {
+            const userEmail = (user.email || '').toLowerCase();
+            return userEmail === fbUser.email.toLowerCase();
+          });
+          if (found) {
+            const userCampus = firestoreData?.campusId || found.user.campusId || 'isb';
+            setCurrentUser({ ...found.user, role: firestoreData?.role || found.role, campusId: userCampus, firebaseUid: fbUser.uid });
+            setSelectedCampus(userCampus);
+          }
+        } catch (err) {
+          console.warn('onAuthStateChanged error:', err);
         }
       }
     });
     return () => unsubscribe();
-  }, [students, supervisors, inchargeUsers, hodUsers]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const showToast = (message, type = 'success') => {
     setToastMessage({ message, type, id: Date.now() });
@@ -445,17 +480,51 @@ export const PortalProvider = ({ children }) => {
     }
 
     let fbUserCredential = null;
+    let fbUser = null;
     try {
       fbUserCredential = await firebaseLogin(targetEmail, password);
+      fbUser = fbUserCredential?.user || null;
     } catch (err) {
-      console.error('Firebase login failed:', err);
-      return { success: false, error: formatFirebaseError(err) };
+      console.warn('Firebase login notice:', err);
+
+      // If local seed user or existing account, try to create in Firebase Auth or check local credentials
+      if (localMatch) {
+        try {
+          fbUserCredential = await firebaseSignup(targetEmail, password, localMatch.user.name);
+          fbUser = fbUserCredential?.user || null;
+        } catch (signupErr) {
+          const isPassValid = localMatch.user.password
+            ? await verifyPasswordHash(password, localMatch.user.password)
+            : true;
+
+          if (isPassValid) {
+            const registeredCampusId = localMatch.user.campusId || selectedCampus;
+            if (registeredCampusId && registeredCampusId !== selectedCampus) {
+              const registeredCampusObj = CAMPUSES.find((c) => c.id === registeredCampusId);
+              const selectedCampusObj = CAMPUSES.find((c) => c.id === selectedCampus);
+              const registeredCampusName = registeredCampusObj ? registeredCampusObj.name : registeredCampusId;
+              const selectedCampusName = selectedCampusObj ? selectedCampusObj.name : selectedCampus;
+              return {
+                success: false,
+                error: `Campus Mismatch Error: Your account is registered under "${registeredCampusName}". You selected "${selectedCampusName}". Please select your correct campus to log in.`
+              };
+            }
+
+            const updatedUser = { ...localMatch.user, role: localMatch.role, campusId: registeredCampusId };
+            setSelectedCampus(updatedUser.campusId || selectedCampus);
+            setCurrentUser(updatedUser);
+            showToast(`Welcome back, ${localMatch.user.name}! Logged in as ${ROLE_NAMES[localMatch.role] || localMatch.role}.`);
+            return { success: true };
+          }
+          return { success: false, error: formatFirebaseError(err) };
+        }
+      } else {
+        return { success: false, error: formatFirebaseError(err) };
+      }
     }
 
-    const fbUser = fbUserCredential.user;
-
     // ── CROSS-ROLE CHECK 2: Firestore Stored Role Metadata Enforcement ──
-    const firestoreData = await getUserRoleFromFirestore(fbUser.uid);
+    const firestoreData = fbUser ? await getUserRoleFromFirestore(fbUser.uid) : null;
     if (firestoreData && firestoreData.role && firestoreData.role !== selectedRole) {
       await firebaseLogout().catch(() => {});
       const actualRoleName = ROLE_NAMES[firestoreData.role] || firestoreData.role;
@@ -466,6 +535,20 @@ export const PortalProvider = ({ children }) => {
       };
     }
 
+    // ── CAMPUS VERIFICATION CHECK: Firestore & User Record Campus Enforcement ──
+    const registeredCampusId = firestoreData?.campusId || localMatch?.user?.campusId;
+    if (registeredCampusId && registeredCampusId !== selectedCampus) {
+      await firebaseLogout().catch(() => {});
+      const registeredCampusObj = CAMPUSES.find((c) => c.id === registeredCampusId);
+      const selectedCampusObj = CAMPUSES.find((c) => c.id === selectedCampus);
+      const registeredCampusName = registeredCampusObj ? registeredCampusObj.name : registeredCampusId;
+      const selectedCampusName = selectedCampusObj ? selectedCampusObj.name : selectedCampus;
+      return {
+        success: false,
+        error: `Campus Mismatch Error: Your account is registered under "${registeredCampusName}". You selected "${selectedCampusName}". Please select your correct campus to log in.`
+      };
+    }
+
     let match = localMatch;
 
     // If account doesn't exist in local state arrays, create it dynamically under verified role
@@ -473,10 +556,10 @@ export const PortalProvider = ({ children }) => {
       const cleanRegNo = cleanId.includes('@') ? cleanId.split('@')[0].toUpperCase() : cleanId.toUpperCase();
       const newRecord = {
         id: `${selectedRole.slice(0, 3)}-${Date.now()}`,
-        firebaseUid: fbUser.uid,
+        firebaseUid: fbUser?.uid || null,
         regNo: cleanRegNo,
-        name: fbUser.displayName || cleanRegNo,
-        email: fbUser.email || targetEmail,
+        name: fbUser?.displayName || cleanRegNo,
+        email: fbUser?.email || targetEmail,
         campusId: selectedCampus,
         role: selectedRole,
         notifications: [],
@@ -494,14 +577,24 @@ export const PortalProvider = ({ children }) => {
       }
       match = { user: newRecord, role: selectedRole };
 
-      // Save role mapping to Firestore for persistent RBAC checks
-      await saveUserRoleToFirestore(fbUser.uid, targetEmail, selectedRole, {
-        regNo: cleanRegNo,
-        name: newRecord.name,
-      });
+      // Save role mapping & campusId to Firestore for persistent RBAC checks
+      if (fbUser?.uid) {
+        await saveUserRoleToFirestore(fbUser.uid, targetEmail, selectedRole, {
+          regNo: cleanRegNo,
+          name: newRecord.name,
+          campusId: selectedCampus,
+        });
+      }
+    } else {
+      // Sync campusId to Firestore if it wasn't saved previously
+      if (fbUser?.uid && firestoreData && !firestoreData.campusId) {
+        await saveUserRoleToFirestore(fbUser.uid, targetEmail, selectedRole, {
+          campusId: match.user.campusId || selectedCampus,
+        });
+      }
     }
 
-    const updatedUser = { ...match.user, role: match.role, firebaseUid: fbUser.uid };
+    const updatedUser = { ...match.user, role: match.role, campusId: registeredCampusId || match.user.campusId || selectedCampus, firebaseUid: fbUser?.uid };
     setSelectedCampus(updatedUser.campusId || selectedCampus);
     setCurrentUser(updatedUser);
 

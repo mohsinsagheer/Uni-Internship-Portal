@@ -69,6 +69,7 @@ export default function AuthModal({ isOpen, onClose }) {
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setInfoMessage('');
 
     if (!regNo.trim()) {
       setError('Please enter your Registration Number or Employee ID.');
@@ -81,6 +82,9 @@ export default function AuthModal({ isOpen, onClose }) {
 
     const result = await login(regNo, password, role);
     if (result.success) {
+      // Reset form state then close immediately — dashboard renders behind the modal
+      setRegNo('');
+      setPassword('');
       onClose();
     } else {
       setError(result.error || 'Login failed. Please verify credentials.');

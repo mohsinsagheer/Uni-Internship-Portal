@@ -29,11 +29,24 @@ export default function App() {
   const [authModalOpen, setAuthModalOpen] = useState(!currentUser);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
-  // Automatically prompt for Login/Signup on load or logout when currentUser is null
+  const prevUserRef = React.useRef(currentUser);
+
+  // Open auth modal when user logs out (goes from authenticated -> null)
+  // Close it and go to dashboard when user logs in (goes from null -> authenticated)
   useEffect(() => {
-    if (!currentUser) {
+    const wasLoggedIn = !!prevUserRef.current;
+    const isLoggedIn = !!currentUser;
+    prevUserRef.current = currentUser;
+
+    if (isLoggedIn) {
+      // User just logged in or already logged in — close modal, show dashboard
+      setAuthModalOpen(false);
+      setActiveTab('dashboard');
+    } else if (wasLoggedIn && !isLoggedIn) {
+      // User just logged out — show auth modal
       setAuthModalOpen(true);
     }
+    // If both null (initial load with no session), authModalOpen initializes as !currentUser (true)
   }, [currentUser]);
 
   // Check if current user is newly created with null profile info
