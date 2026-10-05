@@ -42,7 +42,7 @@ if (typeof window !== "undefined") {
     if (supported) {
       analytics = getAnalytics(app);
     }
-  }).catch(() => {});
+  }).catch(() => { });
 }
 
 // Authentication & Verification helper functions
