@@ -30,6 +30,9 @@ import {
   formatFirebaseError,
   saveUserRoleToFirestore,
   getUserRoleFromFirestore,
+  deleteUserFromFirestore,
+  findUserInFirestoreByEmail,
+  firebaseDeleteCurrentUser,
 } from '../firebase';
 
 const PortalContext = createContext();
@@ -733,11 +736,29 @@ export const PortalProvider = ({ children }) => {
     // ── DUPLICATE ACCOUNT CHECK across ALL roles ──
     const existing = findAccountByPersonalEmail(personalEmail) || findAccount(officialEmail) || findAccount(cleanRegNo);
     if (existing) {
-      const existingRoleName = ROLE_NAMES[existing.role] || existing.role;
-      return {
-        success: false,
-        error: `Duplicate Account Denied: Registration/employee ID or personal email is already registered as a ${existingRoleName}. Duplicate accounts are prohibited.`
-      };
+      // Check if this account actually still exists in Firestore database
+      const activeInDb = existing.user.firebaseUid
+        ? await getUserRoleFromFirestore(existing.user.firebaseUid)
+        : await findUserInFirestoreByEmail(personalEmail);
+
+      // If it only exists in stale browser state but was deleted from the database, purge it!
+      if (!activeInDb) {
+        if (existing.role === 'student') {
+          setStudents((prev) => prev.filter((u) => u.id !== existing.user.id && (u.personalEmail || '').toLowerCase() !== personalEmail.toLowerCase()));
+        } else if (existing.role === 'supervisor') {
+          setSupervisors((prev) => prev.filter((u) => u.id !== existing.user.id && (u.personalEmail || '').toLowerCase() !== personalEmail.toLowerCase()));
+        } else if (existing.role === 'incharge') {
+          setInchargeUsers((prev) => prev.filter((u) => u.id !== existing.user.id && (u.personalEmail || '').toLowerCase() !== personalEmail.toLowerCase()));
+        } else if (existing.role === 'hod') {
+          setHodUsers((prev) => prev.filter((u) => u.id !== existing.user.id && (u.personalEmail || '').toLowerCase() !== personalEmail.toLowerCase()));
+        }
+      } else {
+        const existingRoleName = ROLE_NAMES[existing.role] || existing.role;
+        return {
+          success: false,
+          error: `Duplicate Account Denied: Registration/employee ID or personal email is already registered as a ${existingRoleName}. Duplicate accounts are prohibited.`
+        };
+      }
     }
 
     // Register user in Firebase Authentication (dispatches verification link and signs out)
@@ -923,6 +944,61 @@ export const PortalProvider = ({ children }) => {
 
     showToast(`Password successfully reset for ${match.user.name}! You can now sign in with your new password.`);
     return { success: true, user: match.user, role: match.role };
+  };
+
+  const deleteAccount = async (targetUserId = null, targetFirebaseUid = null, targetEmail = null) => {
+    try {
+      const isSelf = !targetUserId || (currentUser && currentUser.id === targetUserId);
+      const userToDelete = isSelf
+        ? currentUser
+        : (findAccountByPersonalEmail(targetEmail) || findAccount(targetUserId))?.user;
+
+      if (!userToDelete) {
+        return { success: false, error: 'User account not found to delete.' };
+      }
+
+      const uid = targetFirebaseUid || userToDelete.firebaseUid;
+      const email = (targetEmail || userToDelete.personalEmail || userToDelete.email || '').toLowerCase();
+
+      // 1. Delete user from Firestore database
+      if (uid || email) {
+        await deleteUserFromFirestore(uid, email);
+      }
+
+      // 2. If deleting self, delete user from Firebase Auth
+      if (isSelf) {
+        await firebaseDeleteCurrentUser().catch((err) => {
+          console.warn('Firebase delete current user notice:', err);
+        });
+      }
+
+      // 3. Remove user from local state arrays
+      if (userToDelete.role === 'student' || userToDelete.id.startsWith('std-')) {
+        setStudents((prev) => prev.filter((u) => u.id !== userToDelete.id && (u.personalEmail || '').toLowerCase() !== email));
+      } else if (userToDelete.role === 'supervisor' || userToDelete.id.startsWith('sup-')) {
+        setSupervisors((prev) => prev.filter((u) => u.id !== userToDelete.id && (u.personalEmail || '').toLowerCase() !== email));
+      } else if (userToDelete.role === 'incharge' || userToDelete.id.startsWith('inc-')) {
+        setInchargeUsers((prev) => prev.filter((u) => u.id !== userToDelete.id && (u.personalEmail || '').toLowerCase() !== email));
+      } else if (userToDelete.role === 'hod' || userToDelete.id.startsWith('hod-')) {
+        setHodUsers((prev) => prev.filter((u) => u.id !== userToDelete.id && (u.personalEmail || '').toLowerCase() !== email));
+      }
+
+      // 4. If self, log out and notify
+      if (isSelf) {
+        await firebaseLogout().catch(() => {});
+        setCurrentUser(null);
+        showToast('Your account was deleted from the database. This email can now be reused to create a new account.');
+      } else {
+        showToast(`Account for ${userToDelete.name} was permanently deleted from the database.`);
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error('deleteAccount error:', err);
+      const errMsg = formatFirebaseError(err) || 'Failed to delete account.';
+      showToast(errMsg, 'error');
+      return { success: false, error: errMsg };
+    }
   };
 
   const updateUserProfile = (updatedFields) => {
@@ -1316,7 +1392,8 @@ export const PortalProvider = ({ children }) => {
         viewingDocument,
         setViewingDocument,
         toastMessage,
-        showToast
+        showToast,
+        deleteAccount,
       }}
     >
       {children}

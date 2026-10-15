@@ -9,12 +9,18 @@ import {
   sendPasswordResetEmail,
   sendEmailVerification,
   updateProfile,
+  deleteUser,
 } from "firebase/auth";
 import {
   getFirestore,
   doc,
   setDoc,
   getDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
 } from "firebase/firestore";
 
 // Your web app's Firebase configuration
@@ -52,8 +58,120 @@ export const firebaseSendEmailVerification = async (user) => {
   return await sendEmailVerification(targetUser);
 };
 
+export const findUserInFirestoreByEmail = async (email) => {
+  if (!email) return null;
+  const cleanEmail = email.trim().toLowerCase();
+  try {
+    const q1 = query(
+      collection(db, "users"),
+      where("email", "==", cleanEmail)
+    );
+    const snap1 = await Promise.race([
+      getDocs(q1),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore query timed out")), 1500)),
+    ]);
+    if (!snap1.empty) {
+      const docSnap = snap1.docs[0];
+      return { id: docSnap.id, ...docSnap.data() };
+    }
+
+    const q2 = query(
+      collection(db, "users"),
+      where("personalEmail", "==", cleanEmail)
+    );
+    const snap2 = await Promise.race([
+      getDocs(q2),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore query timed out")), 1500)),
+    ]);
+    if (!snap2.empty) {
+      const docSnap = snap2.docs[0];
+      return { id: docSnap.id, ...docSnap.data() };
+    }
+  } catch (err) {
+    console.warn("Firestore find user by email notice:", err);
+  }
+  return null;
+};
+
+export const deleteUserFromFirestore = async (uid, email = null) => {
+  try {
+    if (uid) {
+      const userRef = doc(db, "users", uid);
+      await deleteDoc(userRef).catch(() => {});
+    }
+    if (email) {
+      const cleanEmail = email.trim().toLowerCase();
+      const q1 = query(collection(db, "users"), where("email", "==", cleanEmail));
+      const snap1 = await getDocs(q1).catch(() => ({ empty: true, docs: [] }));
+      if (!snap1.empty) {
+        for (const d of snap1.docs) {
+          await deleteDoc(doc(db, "users", d.id)).catch(() => {});
+        }
+      }
+      const q2 = query(collection(db, "users"), where("personalEmail", "==", cleanEmail));
+      const snap2 = await getDocs(q2).catch(() => ({ empty: true, docs: [] }));
+      if (!snap2.empty) {
+        for (const d of snap2.docs) {
+          await deleteDoc(doc(db, "users", d.id)).catch(() => {});
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Firestore delete user notice:", err);
+  }
+};
+
+export const firebaseDeleteCurrentUser = async () => {
+  const user = auth.currentUser;
+  if (!user) return { success: false, error: 'No active session to delete.' };
+  try {
+    const uid = user.uid;
+    const email = user.email;
+    await deleteUserFromFirestore(uid, email);
+    await deleteUser(user);
+    return { success: true };
+  } catch (err) {
+    console.warn("Firebase delete user notice:", err);
+    return { success: false, error: formatFirebaseError(err) };
+  }
+};
+
 export const firebaseSignup = async (email, password, displayName) => {
-  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  const cleanEmail = email.trim().toLowerCase();
+  let userCredential = null;
+
+  try {
+    userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+  } catch (err) {
+    // If the email is already in use in Firebase Auth, check if the account was deleted from the database
+    if (err.code === 'auth/email-already-in-use') {
+      const activeDbUser = await findUserInFirestoreByEmail(cleanEmail);
+      // If no account exists in the database, it was deleted! Reclaim and recreate clean account
+      if (!activeDbUser) {
+        try {
+          // Attempt to sign in to the old unlinked Firebase Auth record
+          const existingCred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+          // Purge the old auth user so that a clean new account can be created
+          await deleteUser(existingCred.user);
+          // Create the new fresh account in Firebase Auth
+          userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        } catch (recoverErr) {
+          if (recoverErr.code === 'auth/wrong-password' || recoverErr.code === 'auth/invalid-credential') {
+            await sendPasswordResetEmail(auth, cleanEmail).catch(() => { });
+            throw new Error(
+              "An account with this email was previously deleted from the database, but exists in Auth with a previous password. A password reset link has been dispatched to your email so you can set your credentials and create this new account."
+            );
+          }
+          throw recoverErr;
+        }
+      } else {
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
+
   if (displayName && userCredential.user) {
     updateProfile(userCredential.user, { displayName }).catch((err) => {
       console.warn("Profile update notice:", err);

@@ -19,6 +19,9 @@ import {
   ArrowLeft,
   Loader2,
   MailCheck,
+  Trash2,
+  AlertTriangle,
+  Database,
 } from 'lucide-react';
 import { isOfficialUniversityEmail, usePortal } from '../../context/PortalContext';
 
@@ -30,12 +33,13 @@ export default function AuthModal({ isOpen, onClose }) {
     requestPasswordReset,
     resetPassword,
     resendEmailVerification,
+    deleteAccount,
     campuses,
     selectedCampus,
     setSelectedCampus,
   } = usePortal();
 
-  const [activeTab, setActiveTab] = useState('login'); // 'login', 'signup', 'forgot', 'reset', 'verify'
+  const [activeTab, setActiveTab] = useState('login'); // 'login', 'signup', 'forgot', 'reset', 'verify', 'account'
   const [role, setRole] = useState('student'); // 'student', 'supervisor', 'incharge', 'hod'
   const [regNo, setRegNo] = useState('');
   const [personalEmail, setPersonalEmail] = useState('');
@@ -75,11 +79,49 @@ export default function AuthModal({ isOpen, onClose }) {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
+  // Account deletion states
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && currentUser) {
+      setActiveTab('account');
+      setShowDeleteConfirm(false);
+    } else if (isOpen && !currentUser && activeTab === 'account') {
+      setActiveTab('login');
+    }
+  }, [isOpen, currentUser]);
+
+  const handleDeleteAccount = async () => {
+    if (!currentUser || isDeletingAccount) return;
+    setIsDeletingAccount(true);
+    setError('');
+    setInfoMessage('');
+    try {
+      const res = await deleteAccount(
+        currentUser.id,
+        currentUser.firebaseUid,
+        currentUser.personalEmail || currentUser.email
+      );
+      if (res.success) {
+        setShowDeleteConfirm(false);
+        setActiveTab('signup');
+      } else {
+        setError(res.error || 'Failed to delete account.');
+      }
+    } catch (err) {
+      setError(err?.message || 'An error occurred while deleting account.');
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
   const switchTab = (nextTab) => {
     setError('');
     setInfoMessage('');
     setPassword('');
     setRegNo('');
+    setShowDeleteConfirm(false);
     if (nextTab === 'login' && verificationEmail && !personalEmail) {
       setPersonalEmail(verificationEmail);
     }
@@ -369,6 +411,17 @@ export default function AuthModal({ isOpen, onClose }) {
         {/* ── Executive Tab Pill Bar ── */}
         <div className="p-4 sm:p-5 pb-0">
           <div className="p-1.5 bg-slate-100/90 rounded-2xl flex gap-1.5 border border-slate-200 shadow-inner">
+            {currentUser && (
+              <button
+                onClick={() => switchTab('account')}
+                className={`flex-1 py-3 text-center text-sm sm:text-base font-bold rounded-xl transition-all ${activeTab === 'account'
+                  ? 'bg-[#002147] text-white shadow-[0_6px_16px_rgba(0,33,71,0.18)]'
+                  : 'text-slate-600 hover:text-[#002147]'
+                  }`}
+              >
+                My Account
+              </button>
+            )}
             <button
               onClick={() => switchTab('login')}
               className={`flex-1 py-3 text-center text-sm sm:text-base font-bold rounded-xl transition-all ${activeTab === 'login'
@@ -989,6 +1042,115 @@ export default function AuthModal({ isOpen, onClose }) {
                     <span>Sign In with Password</span>
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═════════ TAB 5: MY ACCOUNT & DANGER ZONE ═════════ */}
+          {activeTab === 'account' && currentUser && (
+            <div className="space-y-4 pt-1 animate-fade-in">
+              {/* Account Overview Card */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-[#c29b38] bg-slate-200 shrink-0">
+                  <img
+                    src={currentUser?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80'}
+                    alt={currentUser?.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-slate-900 text-sm sm:text-base truncate">{currentUser?.name}</h4>
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-[#002147] text-[#facc15]">
+                      {currentUser?.role}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 truncate mt-0.5">{currentUser?.personalEmail || currentUser?.email}</p>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">{currentUser?.regNo} · {campuses.find((c) => c.id === (currentUser?.campusId || selectedCampus))?.name}</p>
+                </div>
+              </div>
+
+              {/* Database & Cloud Status */}
+              <div className="p-3.5 bg-sky-50/60 border border-sky-100 rounded-xl space-y-2 text-xs">
+                <div className="flex items-center justify-between text-slate-700">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <Database className="w-3.5 h-3.5 text-sky-700" />
+                    <span>Database Record:</span>
+                  </span>
+                  <span className="font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded text-[11px]">
+                    Active in Firestore
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-700">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <MailCheck className="w-3.5 h-3.5 text-sky-700" />
+                    <span>Email Verification:</span>
+                  </span>
+                  <span className="font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded text-[11px]">
+                    Verified
+                  </span>
+                </div>
+              </div>
+
+              {/* Danger Zone: Account Deletion */}
+              <div className="p-4 bg-red-50/70 border border-red-200 rounded-2xl space-y-3">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                  <div>
+                    <h5 className="font-bold text-red-900 text-xs sm:text-sm">Permanent Account Deletion</h5>
+                    <p className="text-[11px] sm:text-xs text-red-700 mt-1 leading-relaxed">
+                      Deleting your account will remove your record from the database and Firebase Authentication. Once deleted, <strong>this email address ({currentUser?.personalEmail || currentUser?.email}) will be freed up</strong> so another account can be created using this exact same email address.
+                    </p>
+                  </div>
+                </div>
+
+                {!showDeleteConfirm ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="w-full py-2.5 px-3 bg-white hover:bg-red-50 text-red-700 font-bold text-xs rounded-xl border border-red-300 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                    <span>Delete Account from Database</span>
+                  </button>
+                ) : (
+                  <div className="p-3 bg-white rounded-xl border border-red-300 space-y-2.5 animate-fade-in">
+                    <p className="text-xs font-bold text-red-900">
+                      Are you sure you want to permanently delete your account?
+                    </p>
+                    <p className="text-[11px] text-slate-600">
+                      This removes all database records and allows this email to be registered afresh. This action cannot be reversed.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDeleteAccount}
+                        disabled={isDeletingAccount}
+                        className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow disabled:opacity-70"
+                      >
+                        {isDeletingAccount ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Deleting from Database...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Confirm Permanent Deletion</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(false)}
+                        disabled={isDeletingAccount}
+                        className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
