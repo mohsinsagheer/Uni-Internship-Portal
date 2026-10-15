@@ -97,7 +97,7 @@ export const deleteUserFromFirestore = async (uid, email = null) => {
   try {
     if (uid) {
       const userRef = doc(db, "users", uid);
-      await deleteDoc(userRef).catch(() => {});
+      await deleteDoc(userRef).catch(() => { });
     }
     if (email) {
       const cleanEmail = email.trim().toLowerCase();
@@ -105,14 +105,14 @@ export const deleteUserFromFirestore = async (uid, email = null) => {
       const snap1 = await getDocs(q1).catch(() => ({ empty: true, docs: [] }));
       if (!snap1.empty) {
         for (const d of snap1.docs) {
-          await deleteDoc(doc(db, "users", d.id)).catch(() => {});
+          await deleteDoc(doc(db, "users", d.id)).catch(() => { });
         }
       }
       const q2 = query(collection(db, "users"), where("personalEmail", "==", cleanEmail));
       const snap2 = await getDocs(q2).catch(() => ({ empty: true, docs: [] }));
       if (!snap2.empty) {
         for (const d of snap2.docs) {
-          await deleteDoc(doc(db, "users", d.id)).catch(() => {});
+          await deleteDoc(doc(db, "users", d.id)).catch(() => { });
         }
       }
     }

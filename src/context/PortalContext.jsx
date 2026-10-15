@@ -985,7 +985,7 @@ export const PortalProvider = ({ children }) => {
 
       // 4. If self, log out and notify
       if (isSelf) {
-        await firebaseLogout().catch(() => {});
+        await firebaseLogout().catch(() => { });
         setCurrentUser(null);
         showToast('Your account was deleted from the database. This email can now be reused to create a new account.');
       } else {
