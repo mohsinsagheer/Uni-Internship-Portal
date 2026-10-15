@@ -114,12 +114,12 @@ export const formatFirebaseError = (error) => {
   const code = error.code || '';
   switch (code) {
     case 'auth/email-already-in-use':
-      return 'An account with this email/registration number already exists in Firebase Auth.';
+      return 'An account with this personal email already exists in Firebase Auth.';
     case 'auth/invalid-email':
       return 'Invalid email address format.';
     case 'auth/user-not-found':
     case 'auth/invalid-credential':
-      return 'Invalid email/ID or password. Please verify your credentials.';
+      return 'Invalid personal email or password. Please verify your credentials.';
     case 'auth/wrong-password':
       return 'Incorrect password. Please try again.';
     case 'auth/weak-password':

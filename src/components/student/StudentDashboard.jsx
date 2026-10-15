@@ -116,6 +116,45 @@ export default function StudentDashboard({
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [submissionError, setSubmissionError] = useState('');
 
+  const [editingAcademicProfile, setEditingAcademicProfile] = useState(false);
+  const [academicProfileDraft, setAcademicProfileDraft] = useState({
+    semester: currentUser?.semester || '',
+    cgpa: currentUser?.cgpa || '',
+    department: currentUser?.department || '',
+  });
+
+  useEffect(() => {
+    if (editingAcademicProfile) return;
+    setAcademicProfileDraft({
+      semester: currentUser?.semester || '',
+      cgpa: currentUser?.cgpa || '',
+      department: currentUser?.department || '',
+    });
+  }, [currentUser, editingAcademicProfile]);
+
+  const handleSaveAcademicProfile = () => {
+    const cgpa = String(academicProfileDraft.cgpa).trim();
+    if (cgpa && (Number(cgpa) < 0 || Number(cgpa) > 4)) {
+      showToast('CGPA must be between 0.00 and 4.00.', 'error');
+      return;
+    }
+    updateUserProfile({
+      semester: academicProfileDraft.semester || null,
+      cgpa: cgpa || null,
+      department: academicProfileDraft.department.trim() || null,
+    });
+    setEditingAcademicProfile(false);
+  };
+
+  const handleCancelAcademicProfile = () => {
+    setAcademicProfileDraft({
+      semester: currentUser?.semester || '',
+      cgpa: currentUser?.cgpa || '',
+      department: currentUser?.department || '',
+    });
+    setEditingAcademicProfile(false);
+  };
+
   // Corporate Internship Placement edit state
   const [editingPlacement, setEditingPlacement] = useState(false);
   const [editDraft, setEditDraft] = useState({
@@ -289,13 +328,22 @@ export default function StudentDashboard({
                   <BookOpen className="w-3.5 h-3.5 text-[#facc15]" />
                   <span>Internship Directives</span>
                 </button>
-                <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold rounded-full flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  Active Enrolled
-                </span>
-                <span className="px-3 py-1 bg-[#c29b38]/20 border border-[#c29b38]/40 text-[#facc15] font-mono text-xs font-bold rounded-full">
-                  Fall 2026 Term
-                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAcademicProfileDraft({
+                      semester: currentUser?.semester || '',
+                      cgpa: currentUser?.cgpa || '',
+                      department: currentUser?.department || '',
+                    });
+                    setEditingAcademicProfile(true);
+                  }}
+                  className="px-3 py-1 bg-[#c29b38]/20 border border-[#c29b38]/40 text-[#facc15] font-mono text-xs font-bold rounded-full hover:bg-[#c29b38]/30 transition-colors"
+                  title="Edit academic profile"
+                  aria-haspopup="dialog"
+                >
+                  Academic Profile
+                </button>
               </div>
             </div>
 
@@ -345,9 +393,6 @@ export default function StudentDashboard({
                       <h3 className="font-serif font-black text-2xl sm:text-3xl text-[#002147] leading-tight">
                         {currentUser?.name}
                       </h3>
-                      <span className="px-3 py-1 bg-sky-50 text-sky-800 border border-sky-200 text-xs font-bold rounded-lg font-mono">
-                        {currentUser?.regNo}
-                      </span>
                     </div>
 
                     <p className="text-sm font-bold text-slate-700">
@@ -604,10 +649,7 @@ export default function StudentDashboard({
                   </span>
                   {!editingPlacement ? (
                     <button
-                      onClick={() => {
-                        setEditDraft({ ...placementData });
-                        setEditingPlacement(true);
-                      }}
+                      onClick={() => setEditingPlacement(true)}
                       className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 hover:bg-[#002147] hover:text-white text-slate-700 rounded-lg text-xs font-bold transition-all group"
                       title="Edit corporate internship details"
                     >
@@ -1176,6 +1218,89 @@ export default function StudentDashboard({
         </div>
       )}
 
+      {editingAcademicProfile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+          role="presentation"
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveAcademicProfile();
+            }}
+            className="w-full max-w-lg space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="academic-profile-dialog-title"
+          >
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#c29b38]">Fall 2026</p>
+              <h2 id="academic-profile-dialog-title" className="mt-1 text-lg font-black text-[#002147]">
+                Academic Profile
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">Update your semester, CGPA, and department details.</p>
+            </div>
+
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-slate-700">
+                Semester
+                <select
+                  value={academicProfileDraft.semester}
+                  onChange={(e) => setAcademicProfileDraft({ ...academicProfileDraft, semester: e.target.value })}
+                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#002147]"
+                >
+                  <option value="">Select semester</option>
+                  <option value="5th Semester">5th Semester</option>
+                  <option value="6th Semester">6th Semester</option>
+                  <option value="7th Semester">7th Semester</option>
+                  <option value="8th Semester">8th Semester</option>
+                  <option value="Graduated">Graduated / Final Clearance</option>
+                </select>
+              </label>
+              <label className="block text-xs font-bold text-slate-700">
+                CGPA
+                <input
+                  type="number"
+                  min="0"
+                  max="4"
+                  step="0.01"
+                  value={academicProfileDraft.cgpa}
+                  onChange={(e) => setAcademicProfileDraft({ ...academicProfileDraft, cgpa: e.target.value })}
+                  placeholder="e.g. 3.45"
+                  className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#002147]"
+                />
+              </label>
+              <label className="block text-xs font-bold text-slate-700">
+                Department
+                <input
+                  type="text"
+                  value={academicProfileDraft.department}
+                  onChange={(e) => setAcademicProfileDraft({ ...academicProfileDraft, department: e.target.value })}
+                  placeholder="e.g. Computer Science"
+                  className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#002147]"
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleCancelAcademicProfile}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#002147] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#003366]"
+              >
+                <Save className="h-3.5 w-3.5 text-[#facc15]" />
+                Save Profile
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
     </div>
   );

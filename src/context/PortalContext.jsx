@@ -39,12 +39,41 @@ export const isOfficialUniversityEmail = (email) => {
   return lower.endsWith('@isbstudents.comsats.edu.pk') || lower.endsWith('@isbfaculty.comsats.edu.pk');
 };
 
+const findPersonalEmailAccount = (users, email) => {
+  const cleanEmail = email.trim().toLowerCase();
+  return users.find((user) => (user.personalEmail || '').trim().toLowerCase() === cleanEmail);
+};
+
+const PROFILE_FIELDS = [
+  'name',
+  'phone',
+  'program',
+  'semester',
+  'cgpa',
+  'creditHoursCompleted',
+  'internshipCompany',
+  'internshipRole',
+  'internshipMode',
+  'internshipDuration',
+  'department',
+  'designation',
+  'office',
+];
+
+const getProfileFields = (data) => Object.fromEntries(
+  PROFILE_FIELDS
+    .filter((field) => data?.[field] !== undefined)
+    .map((field) => [field, data[field]])
+);
+
 export const isUserMatch = (user, identifier) => {
   if (!user || !identifier) return false;
   const clean = identifier.trim().toLowerCase();
   const rawId = (user.regNo || '').trim().toLowerCase();
   const userEmail = (user.email || '').trim().toLowerCase();
+  const personalEmail = (user.personalEmail || '').trim().toLowerCase();
 
+  if (personalEmail && personalEmail === clean) return true;
   if (userEmail && userEmail === clean) return true;
   if (rawId && rawId === clean) return true;
 
@@ -315,14 +344,36 @@ export const PortalProvider = ({ children }) => {
             ...latestHodUsers.current.map(u => ({ user: u, role: 'hod' })),
           ];
           const found = allUsers.find(({ user }) => {
-            const userEmail = (user.email || '').toLowerCase();
-            return userEmail === fbUser.email.toLowerCase();
+            const userEmails = [user.email, user.personalEmail]
+              .filter(Boolean)
+              .map((email) => email.toLowerCase());
+            return userEmails.includes(fbUser.email.toLowerCase());
           });
-          if (found) {
-            const userCampus = firestoreData?.campusId || found.user.campusId || 'isb';
-            setCurrentUser({ ...found.user, role: firestoreData?.role || found.role, campusId: userCampus, firebaseUid: fbUser.uid });
-            setSelectedCampus(userCampus);
+          if (!found) return;
+
+          const role = firestoreData?.role || found.role;
+          const userCampus = firestoreData?.campusId || found.user.campusId || 'isb';
+          const restoredUser = {
+            ...found.user,
+            ...getProfileFields(firestoreData),
+            role,
+            campusId: userCampus,
+            firebaseUid: fbUser.uid,
+            needsProfileCompletion: firestoreData?.profileCompleted === true
+              ? false
+              : (found.user.needsProfileCompletion ?? true),
+          };
+          if (role === 'student') {
+            setStudents((prev) => prev.map((user) => user.id === restoredUser.id ? restoredUser : user));
+          } else if (role === 'supervisor') {
+            setSupervisors((prev) => prev.map((user) => user.id === restoredUser.id ? restoredUser : user));
+          } else if (role === 'incharge') {
+            setInchargeUsers((prev) => prev.map((user) => user.id === restoredUser.id ? restoredUser : user));
+          } else if (role === 'hod') {
+            setHodUsers((prev) => prev.map((user) => user.id === restoredUser.id ? restoredUser : user));
           }
+          setCurrentUser(restoredUser);
+          setSelectedCampus(userCampus);
         } catch (err) {
           console.warn('onAuthStateChanged error:', err);
         }
@@ -436,6 +487,20 @@ export const PortalProvider = ({ children }) => {
     return null;
   };
 
+  const findAccountByPersonalEmail = (email) => {
+    const accountLists = [
+      [students, 'student'],
+      [supervisors, 'supervisor'],
+      [inchargeUsers, 'incharge'],
+      [hodUsers, 'hod'],
+    ];
+    for (const [users, role] of accountLists) {
+      const user = findPersonalEmailAccount(users, email);
+      if (user) return { user, role };
+    }
+    return null;
+  };
+
   const logout = async () => {
     try {
       await firebaseLogout();
@@ -446,18 +511,21 @@ export const PortalProvider = ({ children }) => {
     showToast('Logged out successfully.');
   };
 
-  const login = async (identifier, password, selectedRole = 'student') => {
+  const login = async (personalEmail, password, selectedRole = 'student') => {
     if (!password || !password.trim()) {
       return { success: false, error: 'Please enter your password.' };
     }
-    if (!identifier || !identifier.trim()) {
-      return { success: false, error: selectedRole === 'student' ? 'Please enter your Registration Number.' : 'Please enter your Account Email.' };
+    if (!personalEmail || !personalEmail.trim()) {
+      return { success: false, error: 'Please enter your personal email address.' };
     }
 
-    const cleanId = identifier.trim();
+    const cleanEmail = personalEmail.trim().toLowerCase();
+    if (isOfficialUniversityEmail(cleanEmail)) {
+      return { success: false, error: 'Please sign in with your personal email address, not your university email.' };
+    }
 
     // ── CROSS-ROLE CHECK 1: Local Account Match Role Enforcement ──
-    const localMatch = findAccount(cleanId);
+    const localMatch = findAccountByPersonalEmail(cleanEmail);
     if (localMatch && localMatch.role !== selectedRole) {
       const actualRoleName = ROLE_NAMES[localMatch.role] || localMatch.role;
       const attemptedRoleName = ROLE_NAMES[selectedRole] || selectedRole;
@@ -467,17 +535,7 @@ export const PortalProvider = ({ children }) => {
       };
     }
 
-    // Determine target email address for Firebase Authentication
-    let targetEmail = localMatch?.user?.email;
-    if (!targetEmail) {
-      if (cleanId.includes('@')) {
-        targetEmail = cleanId.toLowerCase();
-      } else if (selectedRole === 'student') {
-        targetEmail = `${cleanId.toLowerCase()}@isbstudents.comsats.edu.pk`;
-      } else {
-        targetEmail = `${cleanId.toLowerCase()}@isbfaculty.comsats.edu.pk`;
-      }
-    }
+    const targetEmail = cleanEmail;
 
     let fbUserCredential = null;
     let fbUser = null;
@@ -553,17 +611,20 @@ export const PortalProvider = ({ children }) => {
 
     // If account doesn't exist in local state arrays, create it dynamically under verified role
     if (!match) {
-      const cleanRegNo = cleanId.includes('@') ? cleanId.split('@')[0].toUpperCase() : cleanId.toUpperCase();
+      const cleanRegNo = firestoreData?.regNo || cleanEmail.split('@')[0].toUpperCase();
       const newRecord = {
         id: `${selectedRole.slice(0, 3)}-${Date.now()}`,
         firebaseUid: fbUser?.uid || null,
         regNo: cleanRegNo,
-        name: fbUser?.displayName || cleanRegNo,
-        email: fbUser?.email || targetEmail,
+        name: firestoreData?.name || fbUser?.displayName || cleanRegNo,
+        email: firestoreData?.officialEmail || fbUser?.email || targetEmail,
+        personalEmail: fbUser?.email || targetEmail,
         campusId: selectedCampus,
         role: selectedRole,
         notifications: [],
         documents: [],
+        ...getProfileFields(firestoreData),
+        needsProfileCompletion: firestoreData?.profileCompleted !== true,
       };
 
       if (selectedRole === 'student') {
@@ -581,8 +642,10 @@ export const PortalProvider = ({ children }) => {
       if (fbUser?.uid) {
         await saveUserRoleToFirestore(fbUser.uid, targetEmail, selectedRole, {
           regNo: cleanRegNo,
+          personalEmail: targetEmail,
           name: newRecord.name,
           campusId: selectedCampus,
+          profileCompleted: firestoreData?.profileCompleted === true,
         });
       }
     } else {
@@ -594,7 +657,25 @@ export const PortalProvider = ({ children }) => {
       }
     }
 
-    const updatedUser = { ...match.user, role: match.role, campusId: registeredCampusId || match.user.campusId || selectedCampus, firebaseUid: fbUser?.uid };
+    const updatedUser = {
+      ...match.user,
+      ...getProfileFields(firestoreData),
+      role: match.role,
+      campusId: registeredCampusId || match.user.campusId || selectedCampus,
+      firebaseUid: fbUser?.uid,
+      needsProfileCompletion: firestoreData?.profileCompleted === true
+        ? false
+        : (match.user.needsProfileCompletion ?? true),
+    };
+    if (match.role === 'student') {
+      setStudents((prev) => prev.map((user) => user.id === updatedUser.id ? updatedUser : user));
+    } else if (match.role === 'supervisor') {
+      setSupervisors((prev) => prev.map((user) => user.id === updatedUser.id ? updatedUser : user));
+    } else if (match.role === 'incharge') {
+      setInchargeUsers((prev) => prev.map((user) => user.id === updatedUser.id ? updatedUser : user));
+    } else {
+      setHodUsers((prev) => prev.map((user) => user.id === updatedUser.id ? updatedUser : user));
+    }
     setSelectedCampus(updatedUser.campusId || selectedCampus);
     setCurrentUser(updatedUser);
 
@@ -603,9 +684,20 @@ export const PortalProvider = ({ children }) => {
   };
 
   const signup = async (userData) => {
+    if (!userData.regNo?.trim() || !userData.name?.trim()) {
+      return { success: false, error: 'Please enter your name and registration/employee ID.' };
+    }
     const rawInput = userData.regNo.trim();
+    const personalEmail = userData.personalEmail?.trim().toLowerCase() || '';
     const isStudent = userData.role === 'student';
     const campusId = userData.campusId || selectedCampus;
+
+    if (!personalEmail) {
+      return { success: false, error: 'Please enter your personal email address.' };
+    }
+    if (isOfficialUniversityEmail(personalEmail)) {
+      return { success: false, error: 'Please use a personal email address, not your university email.' };
+    }
 
     let cleanRegNo = rawInput.toUpperCase();
     let officialEmail = '';
@@ -620,19 +712,19 @@ export const PortalProvider = ({ children }) => {
     }
 
     // ── DUPLICATE ACCOUNT CHECK across ALL roles ──
-    const existing = findAccount(officialEmail) || findAccount(cleanRegNo);
+    const existing = findAccountByPersonalEmail(personalEmail) || findAccount(officialEmail) || findAccount(cleanRegNo);
     if (existing) {
       const existingRoleName = ROLE_NAMES[existing.role] || existing.role;
       return {
         success: false,
-        error: `Duplicate Account Denied: Registration ID or email "${cleanRegNo}" is already registered as a ${existingRoleName}. Duplicate accounts are prohibited.`
+        error: `Duplicate Account Denied: Registration/employee ID or personal email is already registered as a ${existingRoleName}. Duplicate accounts are prohibited.`
       };
     }
 
     // Register user in Firebase Authentication
     let firebaseUid = null;
     try {
-      const userCred = await firebaseSignup(officialEmail, userData.password, userData.name);
+      const userCred = await firebaseSignup(personalEmail, userData.password, userData.name);
       firebaseUid = userCred?.user?.uid || null;
     } catch (fbErr) {
       console.error('Firebase signup error:', fbErr);
@@ -641,10 +733,13 @@ export const PortalProvider = ({ children }) => {
 
     // Store user role and email in Firebase Firestore
     if (firebaseUid) {
-      await saveUserRoleToFirestore(firebaseUid, officialEmail, userData.role, {
+      await saveUserRoleToFirestore(firebaseUid, personalEmail, userData.role, {
         regNo: cleanRegNo,
+        personalEmail,
+        officialEmail,
         name: userData.name.trim(),
         campusId,
+        profileCompleted: false,
       });
     }
 
@@ -657,6 +752,7 @@ export const PortalProvider = ({ children }) => {
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
+        personalEmail,
         password: hashed,
         campusId,
         role: 'student',
@@ -691,6 +787,7 @@ export const PortalProvider = ({ children }) => {
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
+        personalEmail,
         password: hashed,
         campusId,
         role: 'supervisor',
@@ -715,6 +812,7 @@ export const PortalProvider = ({ children }) => {
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
+        personalEmail,
         password: hashed,
         campusId,
         designation: 'Convener & Internship Incharge',
@@ -724,6 +822,7 @@ export const PortalProvider = ({ children }) => {
         signature: null,
         role: 'incharge',
         avatar: null,
+        needsProfileCompletion: true,
       };
       setInchargeUsers((prev) => [...prev, newIncharge]);
       setCurrentUser(newIncharge);
@@ -738,6 +837,7 @@ export const PortalProvider = ({ children }) => {
         regNo: cleanRegNo,
         name: userData.name.trim(),
         email: officialEmail,
+        personalEmail,
         password: hashed,
         campusId,
         designation: 'Head of Department / Chairperson',
@@ -747,6 +847,7 @@ export const PortalProvider = ({ children }) => {
         signature: null,
         role: 'hod',
         avatar: null,
+        needsProfileCompletion: true,
       };
       setHodUsers((prev) => [...prev, newHod]);
       setCurrentUser(newHod);
@@ -759,7 +860,7 @@ export const PortalProvider = ({ children }) => {
 
   const findUserByEmail = (email) => {
     if (!email) return null;
-    return findAccount(email);
+    return findAccountByPersonalEmail(email);
   };
 
   const resendEmailVerification = async () => {
@@ -776,10 +877,13 @@ export const PortalProvider = ({ children }) => {
 
   const requestPasswordReset = async (email) => {
     if (!email || !email.trim()) {
-      return { success: false, error: 'Please enter your account email address.' };
+      return { success: false, error: 'Please enter your personal email address.' };
     }
 
     const cleanEmail = email.trim().toLowerCase();
+    if (isOfficialUniversityEmail(cleanEmail)) {
+      return { success: false, error: 'Please use the personal email address associated with your account.' };
+    }
     const match = findUserByEmail(cleanEmail);
 
     let fbSuccess = false;
@@ -867,6 +971,15 @@ export const PortalProvider = ({ children }) => {
       needsProfileCompletion: false,
     };
     setCurrentUser(updated);
+
+    if (currentUser.firebaseUid) {
+      saveUserRoleToFirestore(
+        currentUser.firebaseUid,
+        currentUser.personalEmail || currentUser.email || '',
+        currentUser.role,
+        { ...sanitizedFields, profileCompleted: true }
+      );
+    }
 
     if (currentUser.role === 'student') {
       setStudents((prev) => prev.map((std) => std.id === currentUser.id ? { ...std, ...sanitizedFields, needsProfileCompletion: false } : std));

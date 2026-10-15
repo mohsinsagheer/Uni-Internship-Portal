@@ -18,7 +18,7 @@ import {
   CheckCircle2,
   ArrowLeft,
 } from 'lucide-react';
-import { usePortal } from '../../context/PortalContext';
+import { isOfficialUniversityEmail, usePortal } from '../../context/PortalContext';
 
 export default function AuthModal({ isOpen, onClose }) {
   const {
@@ -35,12 +35,13 @@ export default function AuthModal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState('login'); // 'login', 'signup', 'forgot', 'reset'
   const [role, setRole] = useState('student'); // 'student', 'supervisor', 'incharge', 'hod'
   const [regNo, setRegNo] = useState('');
+  const [personalEmail, setPersonalEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
 
-  // Signup fields (Official email removed as requested)
+  // Signup fields
   const [name, setName] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -61,6 +62,7 @@ export default function AuthModal({ isOpen, onClose }) {
     setInfoMessage('');
     setPassword('');
     setRegNo('');
+    setPersonalEmail('');
     setActiveTab(nextTab);
   };
 
@@ -71,8 +73,8 @@ export default function AuthModal({ isOpen, onClose }) {
     setError('');
     setInfoMessage('');
 
-    if (!regNo.trim()) {
-      setError('Please enter your Registration Number or Employee ID.');
+    if (!personalEmail.trim()) {
+      setError('Please enter your personal email address.');
       return;
     }
     if (!password) {
@@ -80,10 +82,11 @@ export default function AuthModal({ isOpen, onClose }) {
       return;
     }
 
-    const result = await login(regNo, password, role);
+    const result = await login(personalEmail, password, role);
     if (result.success) {
       // Reset form state then close immediately — dashboard renders behind the modal
       setRegNo('');
+      setPersonalEmail('');
       setPassword('');
       onClose();
     } else {
@@ -100,8 +103,13 @@ export default function AuthModal({ isOpen, onClose }) {
     e.preventDefault();
     setError('');
 
-    if (!name.trim() || !regNo.trim()) {
-      setError('Please fill in all mandatory account identity fields.');
+    if (!name.trim() || !regNo.trim() || !personalEmail.trim()) {
+      setError('Please enter your name, registration/employee ID, and personal email.');
+      return;
+    }
+
+    if (isOfficialUniversityEmail(personalEmail)) {
+      setError('Please use a personal email address, not your university email.');
       return;
     }
 
@@ -131,6 +139,7 @@ export default function AuthModal({ isOpen, onClose }) {
     const result = await signup({
       name,
       regNo,
+      personalEmail,
       password: signupPassword,
       role,
       program,
@@ -155,7 +164,7 @@ export default function AuthModal({ isOpen, onClose }) {
     setInfoMessage('');
 
     if (!forgotEmail.trim()) {
-      setError('Please enter your account email.');
+      setError('Please enter your personal email address.');
       return;
     }
 
@@ -360,17 +369,18 @@ export default function AuthModal({ isOpen, onClose }) {
             <form onSubmit={handleLoginSubmit} className="space-y-4 pt-1 animate-fade-in">
               <div>
                 <label htmlFor="login-identifier" className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  {role === 'student' ? 'Student Registration Number:' : 'Account Email:'}
+                  Personal Email:
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" aria-hidden="true" />
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" aria-hidden="true" />
                   <input
                     id="login-identifier"
-                    type={role === 'student' ? 'text' : 'email'}
-                    value={regNo}
-                    onChange={(e) => setRegNo(e.target.value)}
-                    placeholder={role === 'student' ? 'e.g. FA21-BCS-045' : 'e.g. faculty@isbfaculty.comsats.edu.pk'}
-                    autoComplete={role === 'student' ? 'username' : 'email'}
+                    type="email"
+                    value={personalEmail}
+                    onChange={(e) => setPersonalEmail(e.target.value)}
+                    placeholder="Enter your personal email"
+                    autoComplete="email"
+                    required
                     className="w-full pl-10 pr-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002147] font-mono font-bold text-slate-800 shadow-sm"
                   />
                 </div>
@@ -424,7 +434,7 @@ export default function AuthModal({ isOpen, onClose }) {
             </form>
           )}
 
-          {/* ═════════ TAB 2: CREATE ACCOUNT (Official Email Removed, Password Added) ═════════ */}
+          {/* ═════════ TAB 2: CREATE ACCOUNT ═════════ */}
           {activeTab === 'signup' && (
             <form onSubmit={handleSignupSubmit} className="space-y-4 pt-1 animate-fade-in">
               <div className="mb-1">
@@ -450,14 +460,33 @@ export default function AuthModal({ isOpen, onClose }) {
               </div>
 
               <div>
-                <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  {role === 'student' ? 'Registration Number:' : 'Account Email:'}
+                <label htmlFor="signup-personal-email" className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Personal Email:
                 </label>
                 <input
+                  id="signup-personal-email"
+                  type="email"
+                  value={personalEmail}
+                  onChange={(e) => setPersonalEmail(e.target.value)}
+                  placeholder="e.g. name@example.com"
+                  autoComplete="email"
+                  required
+                  className="w-full px-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002147] shadow-sm"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="signup-reg-number" className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  {role === 'student' ? 'Registration Number (profile):' : 'Employee ID (profile):'}
+                </label>
+                <input
+                  id="signup-reg-number"
                   type="text"
                   value={regNo}
                   onChange={(e) => setRegNo(e.target.value)}
-                  placeholder={role === 'student' ? 'e.g. FA22-BCS-099' : 'e.g. faculty@isbfaculty.comsats.edu.pk'}
+                  placeholder={role === 'student' ? 'e.g. FA22-BCS-099' : 'e.g. EMP-CS-108'}
+                  autoComplete="off"
+                  required
                   className="w-full px-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#002147] shadow-sm"
                 />
               </div>
@@ -570,7 +599,7 @@ export default function AuthModal({ isOpen, onClose }) {
             </form>
           )}
 
-          {/* ═════════ TAB 3: FORGOT PASSWORD (Enter Account Email & Send Link) ═════════ */}
+          {/* ═════════ TAB 3: FORGOT PASSWORD ═════════ */}
           {activeTab === 'forgot' && (
             <div className="space-y-4 pt-1 animate-fade-in">
               <div className="flex items-center gap-2 mb-1">
@@ -587,7 +616,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     Reset Account Password
                   </h4>
                   <p className="text-xs text-slate-500">
-                    Provide your account email to receive a password reset link via Firebase.
+                    Provide the personal email associated with your account to receive a password reset link.
                   </p>
                 </div>
               </div>
@@ -596,7 +625,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <form onSubmit={handleRequestResetSubmit} className="space-y-4">
                   <div>
                     <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Account Email:
+                      Personal Email:
                     </label>
                     <div className="relative">
                       <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -604,7 +633,9 @@ export default function AuthModal({ isOpen, onClose }) {
                         type="email"
                         value={forgotEmail}
                         onChange={(e) => setForgotEmail(e.target.value)}
-                        placeholder="Portal Account Email"
+                        placeholder="Your personal email"
+                        autoComplete="email"
+                        required
                         className="w-full pl-10 pr-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002147] text-slate-800 shadow-sm font-medium"
                       />
                     </div>

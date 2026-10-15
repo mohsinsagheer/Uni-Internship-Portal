@@ -17,7 +17,6 @@ const HodDashboard = lazy(() => import('./components/hod/HodDashboard'));
 const SignatureModal = lazy(() => import('./components/common/SignatureModal'));
 const DocumentViewerModal = lazy(() => import('./components/common/DocumentViewerModal'));
 const InternshipDirectivesPage = lazy(() => import('./components/common/InternshipDirectivesPage'));
-const ProfileCompletionModal = lazy(() => import('./components/common/ProfileCompletionModal'));
 
 // Simple loading skeleton shown while lazy chunks download
 function DashboardSkeleton() {
@@ -73,7 +72,6 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [authModalOpen, setAuthModalOpen] = useState(!currentUser);
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   const prevUserRef = React.useRef(currentUser);
 
@@ -89,12 +87,6 @@ export default function App() {
       setAuthModalOpen(true);
     }
   }, [currentUser]);
-
-  useEffect(() => {
-    if (currentUser?.needsProfileCompletion) {
-      setProfileModalOpen(true);
-    }
-  }, [currentUser?.id, currentUser?.needsProfileCompletion]);
 
   // Stable callbacks so child components don't re-render when parent re-renders
   const handleOpenSignatureModal = useCallback((signerRole, targetStudent, targetDoc, onSigned = null) => {
@@ -129,7 +121,6 @@ export default function App() {
 
   const openAuth = useCallback(() => setAuthModalOpen(true), []);
   const closeAuth = useCallback(() => setAuthModalOpen(false), []);
-  const closeProfile = useCallback(() => setProfileModalOpen(false), []);
   const goBack = useCallback(() => setActiveTab('dashboard'), []);
 
   return (
@@ -204,12 +195,6 @@ export default function App() {
       <AuthModal isOpen={authModalOpen} onClose={closeAuth} />
 
       {/* Lazy-loaded modals — only mount when needed */}
-      <Suspense fallback={null}>
-        {profileModalOpen && (
-          <ProfileCompletionModal isOpen={profileModalOpen} onClose={closeProfile} />
-        )}
-      </Suspense>
-
       <Suspense fallback={null}>
         {signatureModalConfig && (
           <SignatureModal
