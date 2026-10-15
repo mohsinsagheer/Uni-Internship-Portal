@@ -313,7 +313,7 @@ export default function StudentDashboard({
                     Official Student Internship Dossier
                   </h2>
                   <p className="text-xs text-slate-300">
-                    COMSATS University Islamabad · Student Affairs &amp; Department of Computer Science
+                    COMSATS University Islamabad
                   </p>
                 </div>
               </div>
