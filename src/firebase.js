@@ -55,18 +55,46 @@ export const firebaseSendEmailVerification = async (user) => {
 export const firebaseSignup = async (email, password, displayName) => {
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   if (displayName && userCredential.user) {
-    // Non-blocking profile update
     updateProfile(userCredential.user, { displayName }).catch((err) => {
       console.warn("Profile update notice:", err);
     });
   }
   if (userCredential.user) {
-    // Non-blocking email verification so signup returns immediately
-    sendEmailVerification(userCredential.user).catch((verr) => {
+    try {
+      await sendEmailVerification(userCredential.user);
+    } catch (verr) {
       console.warn("Email verification send notice:", verr);
-    });
+    }
   }
+  // Sign out immediately so newly registered user is not granted access until email is verified
+  await signOut(auth).catch(() => { });
   return userCredential;
+};
+
+export const firebaseResendVerification = async (email, password = null) => {
+  try {
+    let targetUser = auth.currentUser;
+    let shouldSignOut = false;
+    if ((!targetUser || targetUser.email?.toLowerCase() !== email.toLowerCase()) && password) {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      targetUser = cred.user;
+      shouldSignOut = true;
+    }
+    if (!targetUser) {
+      return {
+        success: false,
+        error: "Unable to find active user session. Please enter your credentials to resend the verification link."
+      };
+    }
+    await sendEmailVerification(targetUser);
+    if (shouldSignOut) {
+      await signOut(auth).catch(() => { });
+    }
+    return { success: true };
+  } catch (err) {
+    await signOut(auth).catch(() => { });
+    return { success: false, error: formatFirebaseError(err) };
+  }
 };
 
 export const firebaseLogin = async (email, password) => {

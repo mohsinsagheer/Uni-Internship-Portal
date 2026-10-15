@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Lock,
@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   ArrowLeft,
   Loader2,
+  MailCheck,
 } from 'lucide-react';
 import { isOfficialUniversityEmail, usePortal } from '../../context/PortalContext';
 
@@ -28,12 +29,13 @@ export default function AuthModal({ isOpen, onClose }) {
     signup,
     requestPasswordReset,
     resetPassword,
+    resendEmailVerification,
     campuses,
     selectedCampus,
     setSelectedCampus,
   } = usePortal();
 
-  const [activeTab, setActiveTab] = useState('login'); // 'login', 'signup', 'forgot', 'reset'
+  const [activeTab, setActiveTab] = useState('login'); // 'login', 'signup', 'forgot', 'reset', 'verify'
   const [role, setRole] = useState('student'); // 'student', 'supervisor', 'incharge', 'hod'
   const [regNo, setRegNo] = useState('');
   const [personalEmail, setPersonalEmail] = useState('');
@@ -42,6 +44,11 @@ export default function AuthModal({ isOpen, onClose }) {
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Email verification states
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [verificationPassword, setVerificationPassword] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   // Signup fields
   const [name, setName] = useState('');
@@ -59,12 +66,23 @@ export default function AuthModal({ isOpen, onClose }) {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
 
+  // Countdown timer for resend verification cooldown
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
   const switchTab = (nextTab) => {
     setError('');
     setInfoMessage('');
     setPassword('');
     setRegNo('');
-    setPersonalEmail('');
+    if (nextTab === 'login' && verificationEmail && !personalEmail) {
+      setPersonalEmail(verificationEmail);
+    }
     setIsSubmitting(false);
     setActiveTab(nextTab);
   };
@@ -94,7 +112,15 @@ export default function AuthModal({ isOpen, onClose }) {
         setRegNo('');
         setPersonalEmail('');
         setPassword('');
+        setVerificationEmail('');
+        setVerificationPassword('');
         onClose();
+      } else if (result.requiresVerification) {
+        setVerificationEmail(personalEmail.trim().toLowerCase());
+        setVerificationPassword(password);
+        setActiveTab('verify');
+        setError('');
+        setInfoMessage('Email address is unverified. Please check your inbox and verify before logging in.');
       } else {
         setError(result.error || 'Login failed. Please verify credentials.');
       }
@@ -160,8 +186,19 @@ export default function AuthModal({ isOpen, onClose }) {
         campusId: selectedCampus,
       });
 
-      if (result.success) {
-        // Immediately reset and close modal so user sees their dashboard right away!
+      if (result.success && result.requiresVerification) {
+        // Switch to the verification pending view — credentials access is ONLY granted after email is verified
+        setVerificationEmail(personalEmail.trim().toLowerCase());
+        setVerificationPassword(signupPassword);
+        setName('');
+        setRegNo('');
+        setSignupPassword('');
+        setConfirmPassword('');
+        setCompany('');
+        setActiveTab('verify');
+        setError('');
+        setInfoMessage(`Verification link dispatched to ${personalEmail}. Please verify your email before logging in.`);
+      } else if (result.success) {
         setName('');
         setRegNo('');
         setPersonalEmail('');
@@ -171,6 +208,56 @@ export default function AuthModal({ isOpen, onClose }) {
         onClose();
       } else {
         setError(result.error || 'Registration failed. Please check your details.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCheckVerificationAndLogin = async () => {
+    if (isSubmitting) return;
+    setError('');
+    setInfoMessage('');
+    setIsSubmitting(true);
+    try {
+      const emailToUse = verificationEmail || personalEmail;
+      const passToUse = verificationPassword || password;
+      if (!emailToUse || !passToUse) {
+        setActiveTab('login');
+        setPersonalEmail(emailToUse || '');
+        return;
+      }
+      const result = await login(emailToUse, passToUse, role);
+      if (result.success) {
+        setVerificationEmail('');
+        setVerificationPassword('');
+        setPersonalEmail('');
+        setPassword('');
+        onClose();
+      } else if (result.requiresVerification) {
+        setError('Email address is still not verified. Please click the link sent to your inbox, then try again. (If clicked just now, wait 5 seconds and retry).');
+      } else {
+        setError(result.error || 'Authentication failed. Please verify credentials.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendVerificationLink = async () => {
+    if (resendCooldown > 0 || isSubmitting) return;
+    setError('');
+    setInfoMessage('');
+    setIsSubmitting(true);
+    try {
+      const emailToUse = verificationEmail || personalEmail;
+      const passToUse = verificationPassword || password;
+      const result = await resendEmailVerification(emailToUse, passToUse);
+      if (result.success) {
+        setInfoMessage(`New verification link dispatched to ${emailToUse}! Please check your inbox and spam folder.`);
+        setResendCooldown(30);
+      } else {
+        setError(result.error || 'Failed to resend verification link.');
       }
     } finally {
       setIsSubmitting(false);
@@ -306,6 +393,15 @@ export default function AuthModal({ isOpen, onClose }) {
                 className="flex-1 py-3 text-center text-sm sm:text-base font-bold rounded-xl bg-[#c29b38] text-[#001530] shadow-md transition-all"
               >
                 Reset Password
+              </button>
+            )}
+            {activeTab === 'verify' && (
+              <button
+                onClick={() => { }}
+                className="flex-1 py-3 text-center text-sm sm:text-base font-bold rounded-xl bg-[#c29b38] text-[#001530] shadow-md transition-all flex items-center justify-center gap-1.5"
+              >
+                <MailCheck className="w-4 h-4" />
+                <span>Verify Email</span>
               </button>
             )}
           </div>
@@ -808,6 +904,93 @@ export default function AuthModal({ isOpen, onClose }) {
                 </button>
               </div>
             </form>
+          )}
+
+          {/* ═════════ TAB 5: EMAIL VERIFICATION REQUIRED ═════════ */}
+          {activeTab === 'verify' && (
+            <div className="space-y-4 pt-1 animate-fade-in">
+              <div className="bg-gradient-to-br from-amber-50/90 via-amber-50/50 to-orange-50/40 border-2 border-amber-300 rounded-2xl p-5 text-center space-y-3.5 shadow-sm">
+                <div className="w-14 h-14 rounded-2xl bg-amber-100 border-2 border-amber-400 text-amber-800 mx-auto flex items-center justify-center shadow-md">
+                  <MailCheck className="w-7 h-7" aria-hidden="true" />
+                </div>
+
+                <div>
+                  <span className="inline-block text-[10px] font-black uppercase tracking-widest bg-amber-200/90 text-amber-900 px-3 py-1 rounded-full mb-1.5 border border-amber-400/60">
+                    Mandatory Email Verification
+                  </span>
+                  <h4 className="font-serif font-black text-lg text-[#002147] uppercase tracking-wide">
+                    Verify Your Personal Email Link
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-1">
+                    An official verification link has been dispatched to:
+                  </p>
+                  <p className="font-mono font-bold text-xs sm:text-sm text-[#002147] bg-white py-1.5 px-3 rounded-xl border border-amber-300 mt-1.5 inline-block shadow-sm">
+                    {verificationEmail || personalEmail}
+                  </p>
+                </div>
+
+                <div className="bg-white/95 rounded-xl p-3.5 text-left text-xs text-slate-700 space-y-2 border border-amber-200 shadow-inner">
+                  <p className="font-bold text-[#002147] flex items-center gap-1.5 text-xs">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
+                    <span>Follow these steps to access your dashboard:</span>
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1.5 text-[11px] sm:text-xs text-slate-600 pl-1 leading-relaxed">
+                    <li>Open your email inbox (also inspect your <strong>Spam / Junk</strong> folder).</li>
+                    <li>Click the link sent from <strong>Firebase / COMSATS CUOnline</strong>.</li>
+                    <li>Once verified, click the button below to sign in with your credentials.</li>
+                  </ol>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <button
+                  type="button"
+                  onClick={handleCheckVerificationAndLogin}
+                  disabled={isSubmitting}
+                  className="w-full py-3 bg-gradient-to-r from-[#002147] via-[#0a3264] to-[#002147] hover:from-[#001738] hover:to-[#06244a] text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border border-[#c29b38]/40 group active:scale-[0.99] disabled:opacity-75 disabled:cursor-wait"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 text-[#facc15] animate-spin" aria-hidden="true" />
+                      <span>Checking Verification Status...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>I Have Verified My Email — Open Dashboard</span>
+                      <ArrowRight className="w-4 h-4 text-[#facc15] group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                    </>
+                  )}
+                </button>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResendVerificationLink}
+                    disabled={isSubmitting || resendCooldown > 0}
+                    className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <Send className="w-3.5 h-3.5 text-[#002147]" aria-hidden="true" />
+                    <span>
+                      {resendCooldown > 0
+                        ? `Resend Link (${resendCooldown}s)`
+                        : 'Resend Verification Link'}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPersonalEmail(verificationEmail || personalEmail);
+                      switchTab('login');
+                    }}
+                    className="py-2.5 px-3 bg-white hover:bg-slate-50 text-[#002147] font-bold text-xs rounded-xl border border-slate-300 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Sign In with Password</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* ── Security & Authentication Advisory ── */}
