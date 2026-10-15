@@ -99,8 +99,7 @@ export const OFFICIAL_TEMPLATES = [];
 export const INITIAL_STUDENTS = [];
 
 export const NOTICES = [
-  '⚡ Internship Directive: Mandatory 6 to 8 weeks consecutive tenure required for official 3-credit academic award.',
-  '⚡ Internship Directive: Students must physically draw handwritten digital signature on canvas for all document submissions.',
+  '⚡ Internship Directive: Mandatory atleast 6 weeks consecutive tenure required for official 3-credit academic award.',
   '⚡ Internship Directive: Faculty supervisor validates weekly progress logs prior to incharge endorsement and HOD final clearance.',
   '⚡ Internship Directive: Review & adhere to HEC & Institutional guidelines before corporate reporting.',
   'Fall 2026 Internship Submission Deadline: All clearance dossiers must be signed before 30th September 2026.',

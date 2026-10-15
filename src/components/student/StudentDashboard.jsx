@@ -395,13 +395,15 @@ export default function StudentDashboard({
                       </h3>
                     </div>
 
-                    <p className="text-sm font-bold text-slate-700">
-                      {currentUser?.program || 'NULL'}
-                    </p>
-                    <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                      <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{currentUser?.department || 'NULL'}</span>
-                    </p>
+                    {currentUser?.program && (
+                      <p className="text-sm font-bold text-slate-700">{currentUser.program}</p>
+                    )}
+                    {currentUser?.department && (
+                      <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{currentUser.department}</span>
+                      </p>
+                    )}
                     {/* Official University Email – editable */}
                     {editingEmail ? (
                       <div className="mt-2 p-2.5 bg-slate-50 rounded-xl border border-[#c29b38]/40 shadow-sm max-w-md space-y-2">
