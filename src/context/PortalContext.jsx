@@ -380,7 +380,7 @@ export const PortalProvider = ({ children }) => {
       }
     });
     return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const showToast = (message, type = 'success') => {
@@ -537,6 +537,56 @@ export const PortalProvider = ({ children }) => {
 
     const targetEmail = cleanEmail;
 
+    // ── FAST PATH: Local Account Match (Instant response <10ms) ──
+    if (localMatch) {
+      const registeredCampusId = localMatch.user.campusId || selectedCampus;
+      if (registeredCampusId && registeredCampusId !== selectedCampus) {
+        const registeredCampusObj = CAMPUSES.find((c) => c.id === registeredCampusId);
+        const selectedCampusObj = CAMPUSES.find((c) => c.id === selectedCampus);
+        const registeredCampusName = registeredCampusObj ? registeredCampusObj.name : registeredCampusId;
+        const selectedCampusName = selectedCampusObj ? selectedCampusObj.name : selectedCampus;
+        return {
+          success: false,
+          error: `Campus Mismatch Error: Your account is registered under "${registeredCampusName}". You selected "${selectedCampusName}". Please select your correct campus to log in.`
+        };
+      }
+
+      const isPassValid = localMatch.user.password
+        ? await verifyPasswordHash(password, localMatch.user.password)
+        : true;
+
+      if (isPassValid) {
+        const updatedUser = { ...localMatch.user, role: localMatch.role, campusId: registeredCampusId };
+        setSelectedCampus(updatedUser.campusId || selectedCampus);
+        setCurrentUser(updatedUser);
+        showToast(`Welcome back, ${localMatch.user.name}! Logged in as ${ROLE_NAMES[localMatch.role] || localMatch.role}.`);
+
+        // Synchronize with Firebase Auth and Firestore in the background without holding up the user
+        (async () => {
+          try {
+            const cred = await firebaseLogin(targetEmail, password);
+            if (cred?.user?.uid) {
+              saveUserRoleToFirestore(cred.user.uid, targetEmail, localMatch.role, {
+                campusId: registeredCampusId,
+              });
+            }
+          } catch (err) {
+            try {
+              const cred = await firebaseSignup(targetEmail, password, localMatch.user.name);
+              if (cred?.user?.uid) {
+                saveUserRoleToFirestore(cred.user.uid, targetEmail, localMatch.role, {
+                  campusId: registeredCampusId,
+                });
+              }
+            } catch (_) { }
+          }
+        })();
+
+        return { success: true };
+      }
+    }
+
+    // ── FIREBASE ONLINE AUTH PATH (for non-local or online accounts) ──
     let fbUserCredential = null;
     let fbUser = null;
     try {
@@ -544,47 +594,13 @@ export const PortalProvider = ({ children }) => {
       fbUser = fbUserCredential?.user || null;
     } catch (err) {
       console.warn('Firebase login notice:', err);
-
-      // If local seed user or existing account, try to create in Firebase Auth or check local credentials
-      if (localMatch) {
-        try {
-          fbUserCredential = await firebaseSignup(targetEmail, password, localMatch.user.name);
-          fbUser = fbUserCredential?.user || null;
-        } catch (signupErr) {
-          const isPassValid = localMatch.user.password
-            ? await verifyPasswordHash(password, localMatch.user.password)
-            : true;
-
-          if (isPassValid) {
-            const registeredCampusId = localMatch.user.campusId || selectedCampus;
-            if (registeredCampusId && registeredCampusId !== selectedCampus) {
-              const registeredCampusObj = CAMPUSES.find((c) => c.id === registeredCampusId);
-              const selectedCampusObj = CAMPUSES.find((c) => c.id === selectedCampus);
-              const registeredCampusName = registeredCampusObj ? registeredCampusObj.name : registeredCampusId;
-              const selectedCampusName = selectedCampusObj ? selectedCampusObj.name : selectedCampus;
-              return {
-                success: false,
-                error: `Campus Mismatch Error: Your account is registered under "${registeredCampusName}". You selected "${selectedCampusName}". Please select your correct campus to log in.`
-              };
-            }
-
-            const updatedUser = { ...localMatch.user, role: localMatch.role, campusId: registeredCampusId };
-            setSelectedCampus(updatedUser.campusId || selectedCampus);
-            setCurrentUser(updatedUser);
-            showToast(`Welcome back, ${localMatch.user.name}! Logged in as ${ROLE_NAMES[localMatch.role] || localMatch.role}.`);
-            return { success: true };
-          }
-          return { success: false, error: formatFirebaseError(err) };
-        }
-      } else {
-        return { success: false, error: formatFirebaseError(err) };
-      }
+      return { success: false, error: formatFirebaseError(err) };
     }
 
     // ── CROSS-ROLE CHECK 2: Firestore Stored Role Metadata Enforcement ──
-    const firestoreData = fbUser ? await getUserRoleFromFirestore(fbUser.uid) : null;
+    const firestoreData = fbUser ? await getUserRoleFromFirestore(fbUser.uid, 1200) : null;
     if (firestoreData && firestoreData.role && firestoreData.role !== selectedRole) {
-      await firebaseLogout().catch(() => {});
+      await firebaseLogout().catch(() => { });
       const actualRoleName = ROLE_NAMES[firestoreData.role] || firestoreData.role;
       const attemptedRoleName = ROLE_NAMES[selectedRole] || selectedRole;
       return {
@@ -596,7 +612,7 @@ export const PortalProvider = ({ children }) => {
     // ── CAMPUS VERIFICATION CHECK: Firestore & User Record Campus Enforcement ──
     const registeredCampusId = firestoreData?.campusId || localMatch?.user?.campusId;
     if (registeredCampusId && registeredCampusId !== selectedCampus) {
-      await firebaseLogout().catch(() => {});
+      await firebaseLogout().catch(() => { });
       const registeredCampusObj = CAMPUSES.find((c) => c.id === registeredCampusId);
       const selectedCampusObj = CAMPUSES.find((c) => c.id === selectedCampus);
       const registeredCampusName = registeredCampusObj ? registeredCampusObj.name : registeredCampusId;
@@ -638,9 +654,9 @@ export const PortalProvider = ({ children }) => {
       }
       match = { user: newRecord, role: selectedRole };
 
-      // Save role mapping & campusId to Firestore for persistent RBAC checks
+      // Save role mapping & campusId to Firestore in background
       if (fbUser?.uid) {
-        await saveUserRoleToFirestore(fbUser.uid, targetEmail, selectedRole, {
+        saveUserRoleToFirestore(fbUser.uid, targetEmail, selectedRole, {
           regNo: cleanRegNo,
           personalEmail: targetEmail,
           name: newRecord.name,
@@ -649,9 +665,9 @@ export const PortalProvider = ({ children }) => {
         });
       }
     } else {
-      // Sync campusId to Firestore if it wasn't saved previously
+      // Sync campusId to Firestore in background
       if (fbUser?.uid && firestoreData && !firestoreData.campusId) {
-        await saveUserRoleToFirestore(fbUser.uid, targetEmail, selectedRole, {
+        saveUserRoleToFirestore(fbUser.uid, targetEmail, selectedRole, {
           campusId: match.user.campusId || selectedCampus,
         });
       }
@@ -731,9 +747,9 @@ export const PortalProvider = ({ children }) => {
       return { success: false, error: formatFirebaseError(fbErr) };
     }
 
-    // Store user role and email in Firebase Firestore
+    // Store user role and email in Firebase Firestore asynchronously without blocking
     if (firebaseUid) {
-      await saveUserRoleToFirestore(firebaseUid, personalEmail, userData.role, {
+      saveUserRoleToFirestore(firebaseUid, personalEmail, userData.role, {
         regNo: cleanRegNo,
         personalEmail,
         officialEmail,

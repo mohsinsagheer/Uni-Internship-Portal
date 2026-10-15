@@ -7,11 +7,31 @@ import AuthModal from './components/auth/AuthModal';
 import { usePortal } from './context/PortalContext';
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
-// Heavy role-dashboards: lazy-loaded so they only download after login
-const StudentDashboard = lazy(() => import('./components/student/StudentDashboard'));
-const FacultyDashboard = lazy(() => import('./components/faculty/FacultyDashboard'));
-const InchargeDashboard = lazy(() => import('./components/incharge/InchargeDashboard'));
-const HodDashboard = lazy(() => import('./components/hod/HodDashboard'));
+// Heavy role-dashboards: lazy-loaded and preloaded during idle time for instantaneous display
+const loadStudentDashboard = () => import('./components/student/StudentDashboard');
+const loadFacultyDashboard = () => import('./components/faculty/FacultyDashboard');
+const loadInchargeDashboard = () => import('./components/incharge/InchargeDashboard');
+const loadHodDashboard = () => import('./components/hod/HodDashboard');
+
+const StudentDashboard = lazy(loadStudentDashboard);
+const FacultyDashboard = lazy(loadFacultyDashboard);
+const InchargeDashboard = lazy(loadInchargeDashboard);
+const HodDashboard = lazy(loadHodDashboard);
+
+// Prefetch dashboard code chunks in the background so dashboard renders immediately upon login/signup
+if (typeof window !== 'undefined') {
+  const prefetchDashboards = () => {
+    loadStudentDashboard();
+    loadFacultyDashboard();
+    loadInchargeDashboard();
+    loadHodDashboard();
+  };
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(prefetchDashboards, { timeout: 1500 });
+  } else {
+    setTimeout(prefetchDashboards, 200);
+  }
+}
 
 // Modals that are rarely needed: lazy-loaded on demand
 const SignatureModal = lazy(() => import('./components/common/SignatureModal'));

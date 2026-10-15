@@ -17,6 +17,7 @@ import {
   Send,
   CheckCircle2,
   ArrowLeft,
+  Loader2,
 } from 'lucide-react';
 import { isOfficialUniversityEmail, usePortal } from '../../context/PortalContext';
 
@@ -40,6 +41,7 @@ export default function AuthModal({ isOpen, onClose }) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Signup fields
   const [name, setName] = useState('');
@@ -63,6 +65,7 @@ export default function AuthModal({ isOpen, onClose }) {
     setPassword('');
     setRegNo('');
     setPersonalEmail('');
+    setIsSubmitting(false);
     setActiveTab(nextTab);
   };
 
@@ -70,6 +73,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError('');
     setInfoMessage('');
 
@@ -82,15 +86,20 @@ export default function AuthModal({ isOpen, onClose }) {
       return;
     }
 
-    const result = await login(personalEmail, password, role);
-    if (result.success) {
-      // Reset form state then close immediately — dashboard renders behind the modal
-      setRegNo('');
-      setPersonalEmail('');
-      setPassword('');
-      onClose();
-    } else {
-      setError(result.error || 'Login failed. Please verify credentials.');
+    setIsSubmitting(true);
+    try {
+      const result = await login(personalEmail, password, role);
+      if (result.success) {
+        // Reset form state then close immediately — dashboard renders right away
+        setRegNo('');
+        setPersonalEmail('');
+        setPassword('');
+        onClose();
+      } else {
+        setError(result.error || 'Login failed. Please verify credentials.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -101,6 +110,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
   const handleSignupSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError('');
 
     if (!name.trim() || !regNo.trim() || !personalEmail.trim()) {
@@ -136,25 +146,34 @@ export default function AuthModal({ isOpen, onClose }) {
       }
     }
 
-    const result = await signup({
-      name,
-      regNo,
-      personalEmail,
-      password: signupPassword,
-      role,
-      program,
-      internshipCompany: company || null,
-      semester: semester || null,
-      campusId: selectedCampus,
-    });
+    setIsSubmitting(true);
+    try {
+      const result = await signup({
+        name,
+        regNo,
+        personalEmail,
+        password: signupPassword,
+        role,
+        program,
+        internshipCompany: company || null,
+        semester: semester || null,
+        campusId: selectedCampus,
+      });
 
-    if (result.success) {
-      setInfoMessage('Account registered! A verification link has been sent to your email. Please check your inbox.');
-      setTimeout(() => {
+      if (result.success) {
+        // Immediately reset and close modal so user sees their dashboard right away!
+        setName('');
+        setRegNo('');
+        setPersonalEmail('');
+        setSignupPassword('');
+        setConfirmPassword('');
+        setCompany('');
         onClose();
-      }, 3000);
-    } else {
-      setError(result.error || 'Registration failed. Please check your details.');
+      } else {
+        setError(result.error || 'Registration failed. Please check your details.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -426,10 +445,20 @@ export default function AuthModal({ isOpen, onClose }) {
 
               <button
                 type="submit"
-                className="w-full mt-2 py-3 bg-gradient-to-r from-[#002147] via-[#0a3264] to-[#002147] hover:from-[#001738] hover:to-[#06244a] text-white font-black text-xs sm:text-sm rounded-xl transition-colors shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border border-[#c29b38]/40 group active:scale-[0.99]"
+                disabled={isSubmitting}
+                className="w-full mt-2 py-3 bg-gradient-to-r from-[#002147] via-[#0a3264] to-[#002147] hover:from-[#001738] hover:to-[#06244a] text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border border-[#c29b38]/40 group active:scale-[0.99] disabled:opacity-75 disabled:cursor-wait"
               >
-                <span>Sign In to CUOnline Portal</span>
-                <ArrowRight className="w-4 h-4 text-[#facc15] group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 text-[#facc15] animate-spin" aria-hidden="true" />
+                    <span>Signing In...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign In to CUOnline Portal</span>
+                    <ArrowRight className="w-4 h-4 text-[#facc15] group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                  </>
+                )}
               </button>
             </form>
           )}
@@ -591,10 +620,20 @@ export default function AuthModal({ isOpen, onClose }) {
 
               <button
                 type="submit"
-                className="w-full mt-2 py-3 bg-gradient-to-r from-[#002147] via-[#0a3264] to-[#002147] hover:from-[#001738] hover:to-[#06244a] text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border border-[#c29b38]/40 group active:scale-[0.99]"
+                disabled={isSubmitting}
+                className="w-full mt-2 py-3 bg-gradient-to-r from-[#002147] via-[#0a3264] to-[#002147] hover:from-[#001738] hover:to-[#06244a] text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border border-[#c29b38]/40 group active:scale-[0.99] disabled:opacity-75 disabled:cursor-wait"
               >
-                <span>Create Account with Password</span>
-                <ArrowRight className="w-4 h-4 text-[#facc15] group-hover:translate-x-1 transition-transform" />
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 text-[#facc15] animate-spin" aria-hidden="true" />
+                    <span>Creating Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Create Account with Password</span>
+                    <ArrowRight className="w-4 h-4 text-[#facc15] group-hover:translate-x-1 transition-transform" />
+                  </>
+                )}
               </button>
             </form>
           )}

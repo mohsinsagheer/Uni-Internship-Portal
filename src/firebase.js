@@ -55,14 +55,16 @@ export const firebaseSendEmailVerification = async (user) => {
 export const firebaseSignup = async (email, password, displayName) => {
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   if (displayName && userCredential.user) {
-    await updateProfile(userCredential.user, { displayName });
+    // Non-blocking profile update
+    updateProfile(userCredential.user, { displayName }).catch((err) => {
+      console.warn("Profile update notice:", err);
+    });
   }
   if (userCredential.user) {
-    try {
-      await sendEmailVerification(userCredential.user);
-    } catch (verr) {
+    // Non-blocking email verification so signup returns immediately
+    sendEmailVerification(userCredential.user).catch((verr) => {
       console.warn("Email verification send notice:", verr);
-    }
+    });
   }
   return userCredential;
 };
@@ -79,27 +81,35 @@ export const firebaseResetPassword = async (email) => {
   return await sendPasswordResetEmail(auth, email);
 };
 
-// Store user role and email in Firebase Firestore
-export const saveUserRoleToFirestore = async (uid, email, role, extraData = {}) => {
+// Store user role and email in Firebase Firestore (asynchronous non-blocking)
+export const saveUserRoleToFirestore = (uid, email, role, extraData = {}) => {
   try {
     const userRef = doc(db, "users", uid);
-    await setDoc(userRef, {
+    return setDoc(userRef, {
       uid,
       email: email.toLowerCase(),
       role,
       updatedAt: new Date().toISOString(),
       ...extraData,
-    }, { merge: true });
+    }, { merge: true }).catch((err) => {
+      console.warn("Firestore save user role notice:", err);
+    });
   } catch (err) {
     console.warn("Firestore save user role notice:", err);
+    return Promise.resolve();
   }
 };
 
-// Fetch user role and details from Firebase Firestore
-export const getUserRoleFromFirestore = async (uid) => {
+// Fetch user role and details from Firebase Firestore with safety timeout
+export const getUserRoleFromFirestore = async (uid, timeoutMs = 1200) => {
   try {
     const userRef = doc(db, "users", uid);
-    const snap = await getDoc(userRef);
+    const snap = await Promise.race([
+      getDoc(userRef),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Firestore fetch timed out")), timeoutMs)
+      ),
+    ]);
     if (snap.exists()) {
       return snap.data();
     }

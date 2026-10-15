@@ -1,4 +1,4 @@
-const ITERATIONS = 100000;
+const ITERATIONS = 10000;
 
 const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const b64ToBuf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
