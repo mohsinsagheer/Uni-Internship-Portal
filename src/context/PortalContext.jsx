@@ -155,6 +155,22 @@ const asArray = (value, fallback) => {
 
 const withCampus = (item, campusId = 'isb') => ({ ...item, campusId: item.campusId || campusId });
 
+const deduplicateStudents = (students) => {
+  const seenIdentities = new Set();
+  return students.filter((student) => {
+    const identities = [
+      student.firebaseUid && `uid:${student.firebaseUid.toLowerCase()}`,
+      student.regNo && `reg:${student.regNo.trim().toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+      student.personalEmail && `email:${student.personalEmail.trim().toLowerCase()}`,
+      student.email && `email:${student.email.trim().toLowerCase()}`,
+      student.id && `id:${student.id}`,
+    ].filter(Boolean);
+    const isDuplicate = identities.some((identity) => seenIdentities.has(identity));
+    identities.forEach((identity) => seenIdentities.add(identity));
+    return !isDuplicate;
+  });
+};
+
 export const downloadTemplateFile = (tpl) => {
   if (!tpl) return;
   const link = document.createElement('a');
@@ -191,10 +207,10 @@ export const PortalProvider = ({ children }) => {
         s.documents && s.documents.some((d) => ['tpl-1', 'tpl-2', 'tpl-3', 'tpl-4'].includes(d.templateId))
       );
       if (hasLegacyDocs) return INITIAL_STUDENTS;
-      return (Array.isArray(saved) ? saved : INITIAL_STUDENTS).map((item) => withCampus({
+      return deduplicateStudents((Array.isArray(saved) ? saved : INITIAL_STUDENTS).map((item) => withCampus({
         ...item,
         notifications: item.notifications || [],
-      }));
+      })));
     }
     return INITIAL_STUDENTS;
   });
@@ -274,7 +290,7 @@ export const PortalProvider = ({ children }) => {
       }
 
       if (cancelled) return;
-      setStudents(hashedStudents);
+      setStudents(deduplicateStudents(hashedStudents));
       setSupervisors(hashedSupervisors);
       setInchargeUsers(hashedIncharge);
       setHodUsers(hashedHod);
@@ -402,12 +418,25 @@ export const PortalProvider = ({ children }) => {
     : selectedCampus;
 
   const campusStudents = useMemo(
-    () => students.filter((s) => (s.campusId || 'isb') === viewCampus),
+    () => deduplicateStudents(students.filter((s) => (s.campusId || 'isb') === viewCampus)),
     [students, viewCampus]
   );
   const campusSupervisors = useMemo(
     () => supervisors.filter((s) => (s.campusId || 'isb') === viewCampus),
     [supervisors, viewCampus]
+  );
+  const registeredCampusSupervisors = useMemo(
+    () => {
+      const seenUids = new Set();
+      return campusSupervisors.filter((supervisor) => {
+        if (!supervisor.firebaseUid) return false;
+        const uid = supervisor.firebaseUid.toLowerCase();
+        if (seenUids.has(uid)) return false;
+        seenUids.add(uid);
+        return true;
+      });
+    },
+    [campusSupervisors]
   );
   const campusTemplates = useMemo(
     () => templates,
@@ -647,7 +676,7 @@ export const PortalProvider = ({ children }) => {
       };
 
       if (selectedRole === 'student') {
-        setStudents((prev) => [newRecord, ...prev]);
+        setStudents((prev) => deduplicateStudents([newRecord, ...prev]));
       } else if (selectedRole === 'supervisor') {
         setSupervisors((prev) => [...prev, newRecord]);
       } else if (selectedRole === 'incharge') {
@@ -817,7 +846,7 @@ export const PortalProvider = ({ children }) => {
     };
 
     if (userData.role === 'student') {
-      setStudents((prev) => [newRecord, ...prev]);
+      setStudents((prev) => deduplicateStudents([newRecord, ...prev]));
     } else if (userData.role === 'supervisor') {
       setSupervisors((prev) => [...prev, newRecord]);
     } else if (userData.role === 'incharge') {
@@ -1245,7 +1274,10 @@ export const PortalProvider = ({ children }) => {
 
   const getSupervisorForStudent = (student) => {
     if (!student || !student.assignedSupervisorId) return null;
-    return supervisors.find((s) => s.id === student.assignedSupervisorId) || null;
+    const availableSupervisors = currentUser?.role === 'incharge'
+      ? registeredCampusSupervisors
+      : supervisors;
+    return availableSupervisors.find((s) => s.id === student.assignedSupervisorId) || null;
   };
 
   const getStudentLiveStatus = (student) => {
@@ -1350,7 +1382,7 @@ export const PortalProvider = ({ children }) => {
         campuses: CAMPUSES,
         currentUser,
         setCurrentUser,
-        supervisors: campusSupervisors,
+        supervisors: currentUser?.role === 'incharge' ? registeredCampusSupervisors : campusSupervisors,
         students: campusStudents,
         templates: campusTemplates,
         notices: NOTICES,
