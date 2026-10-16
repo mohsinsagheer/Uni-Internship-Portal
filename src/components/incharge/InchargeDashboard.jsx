@@ -32,6 +32,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
     currentUser,
     students,
     supervisors,
+    inchargeRosterLoading,
     templates,
     getFilteredStudents,
     getSupervisorForStudent,
@@ -585,8 +586,20 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
           ) : (
             <div className="p-16 text-center">
               <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4"><Users className="w-8 h-8 text-slate-300" /></div>
-              <h4 className="font-bold text-slate-600 text-sm">No Students Found</h4>
-              <p className="text-xs text-slate-400 mt-1">Try resetting the filter above.</p>
+              <h4 className="font-bold text-slate-600 text-sm">
+                {inchargeRosterLoading
+                  ? 'Loading registered student accounts…'
+                  : students.length > 0
+                    ? 'No Students Found'
+                    : 'No registered student accounts found'}
+              </h4>
+              <p className="text-xs text-slate-400 mt-1">
+                {inchargeRosterLoading
+                  ? 'Fetching student-role accounts from Firebase.'
+                  : students.length > 0
+                    ? 'Try resetting the filter above.'
+                    : 'Only active Firebase accounts with the student role appear here.'}
+              </p>
             </div>
           )}
         </div>

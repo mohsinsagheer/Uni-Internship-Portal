@@ -30,6 +30,7 @@ import {
   formatFirebaseError,
   saveUserRoleToFirestore,
   getUserRoleFromFirestore,
+  getUsersByRoleFromFirestore,
   deleteUserFromFirestore,
   findUserInFirestoreByEmail,
   firebaseDeleteCurrentUser,
@@ -241,6 +242,8 @@ export const PortalProvider = ({ children }) => {
     if (saved) return withCampus({ ...saved, notifications: saved.notifications || [] });
     return null;
   });
+  const [inchargeRoster, setInchargeRoster] = useState({ students: [], supervisors: [] });
+  const [inchargeRosterLoading, setInchargeRosterLoading] = useState(false);
 
   // Ref always holds the latest state values for use in callbacks
   const latestStudents = useRef([]);
@@ -413,30 +416,115 @@ export const PortalProvider = ({ children }) => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
+  const inchargeCampus = currentUser?.campusId || selectedCampus;
+  useEffect(() => {
+    if (currentUser?.role !== 'incharge') {
+      setInchargeRoster({ students: [], supervisors: [] });
+      setInchargeRosterLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setInchargeRoster({ students: [], supervisors: [] });
+    setInchargeRosterLoading(true);
+
+    const loadInchargeRoster = async () => {
+      try {
+        const [firebaseStudents, firebaseSupervisors] = await Promise.all([
+          getUsersByRoleFromFirestore('student'),
+          getUsersByRoleFromFirestore('supervisor'),
+        ]);
+        if (cancelled) return;
+
+        const matchesCampus = (user) => (user.campusId || 'isb') === inchargeCampus;
+        const supervisorsForCampus = firebaseSupervisors
+          .filter(matchesCampus)
+          .map((user) => {
+            const local = latestSupervisors.current.find((candidate) => candidate.firebaseUid === user.firebaseUid);
+            return {
+              ...local,
+              ...user,
+              id: local?.id || `sup-${user.firebaseUid}`,
+              firebaseUid: user.firebaseUid,
+              role: 'supervisor',
+              name: user.name || local?.name || user.regNo || user.firebaseUid,
+              regNo: user.regNo || local?.regNo || '',
+              email: user.officialEmail || local?.email || user.email || '',
+              personalEmail: user.personalEmail || user.email || local?.personalEmail || '',
+              campusId: user.campusId || local?.campusId || 'isb',
+            };
+          });
+        const supervisorByUid = new Map(
+          supervisorsForCampus.map((supervisor) => [supervisor.firebaseUid, supervisor])
+        );
+        const supervisorIds = new Set(supervisorsForCampus.map((supervisor) => supervisor.id));
+        const studentsForCampus = deduplicateStudents(firebaseStudents
+          .filter(matchesCampus)
+          .map((user) => {
+            const local = latestStudents.current.find((candidate) => candidate.firebaseUid === user.firebaseUid);
+            const assignedSupervisorId = user.assignedSupervisorUid
+              ? supervisorByUid.get(user.assignedSupervisorUid)?.id || ''
+              : (user.assignedSupervisorId || local?.assignedSupervisorId || '');
+            return {
+              ...local,
+              ...user,
+              id: local?.id || `std-${user.firebaseUid}`,
+              firebaseUid: user.firebaseUid,
+              role: 'student',
+              name: user.name || local?.name || user.regNo || user.firebaseUid,
+              regNo: user.regNo || local?.regNo || '',
+              email: user.officialEmail || local?.email || user.email || '',
+              personalEmail: user.personalEmail || user.email || local?.personalEmail || '',
+              campusId: user.campusId || local?.campusId || 'isb',
+              documents: local?.documents || [],
+              notifications: local?.notifications || [],
+              status: local?.status || 'pending_submission',
+              assignedSupervisorId: supervisorIds.has(assignedSupervisorId) ? assignedSupervisorId : '',
+            };
+          }));
+
+        setStudents((previous) => deduplicateStudents([...studentsForCampus, ...previous]));
+        setSupervisors((previous) => {
+          const liveSupervisorIds = new Set(supervisorsForCampus.map((user) => user.firebaseUid));
+          return [
+            ...supervisorsForCampus,
+            ...previous.filter((user) => !liveSupervisorIds.has(user.firebaseUid)),
+          ];
+        });
+        setInchargeRoster({ students: studentsForCampus, supervisors: supervisorsForCampus });
+      } catch (err) {
+        console.error('Failed to load incharge Firebase roster:', err);
+        if (!cancelled) {
+          setInchargeRoster({ students: [], supervisors: [] });
+          showToast('Could not load registered students and supervisors from Firebase.', 'error');
+        }
+      } finally {
+        if (!cancelled) setInchargeRosterLoading(false);
+      }
+    };
+
+    loadInchargeRoster();
+    return () => {
+      cancelled = true;
+    };
+  // Local arrays are read through refs so local changes do not repeatedly query Firebase.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.role, inchargeCampus]);
+
   const viewCampus = currentUser?.role === 'student'
     ? (currentUser.campusId || selectedCampus)
     : selectedCampus;
 
-  const campusStudents = useMemo(
+  const localCampusStudents = useMemo(
     () => deduplicateStudents(students.filter((s) => (s.campusId || 'isb') === viewCampus)),
     [students, viewCampus]
   );
+  const campusStudents = currentUser?.role === 'incharge'
+    ? inchargeRoster.students
+    : localCampusStudents;
   const campusSupervisors = useMemo(
     () => supervisors.filter((s) => (s.campusId || 'isb') === viewCampus),
     [supervisors, viewCampus]
-  );
-  const registeredCampusSupervisors = useMemo(
-    () => {
-      const seenUids = new Set();
-      return campusSupervisors.filter((supervisor) => {
-        if (!supervisor.firebaseUid) return false;
-        const uid = supervisor.firebaseUid.toLowerCase();
-        if (seenUids.has(uid)) return false;
-        seenUids.add(uid);
-        return true;
-      });
-    },
-    [campusSupervisors]
   );
   const campusTemplates = useMemo(
     () => templates,
@@ -978,9 +1066,14 @@ export const PortalProvider = ({ children }) => {
   const deleteAccount = async (targetUserId = null, targetFirebaseUid = null, targetEmail = null) => {
     try {
       const isSelf = !targetUserId || (currentUser && currentUser.id === targetUserId);
+      const firebaseRosterStudent = currentUser?.role === 'incharge'
+        ? inchargeRoster.students.find((student) =>
+          student.id === targetUserId || (targetFirebaseUid && student.firebaseUid === targetFirebaseUid)
+        )
+        : null;
       const userToDelete = isSelf
         ? currentUser
-        : (findAccountByPersonalEmail(targetEmail) || findAccount(targetUserId))?.user;
+        : firebaseRosterStudent || (findAccountByPersonalEmail(targetEmail) || findAccount(targetUserId))?.user;
 
       if (!userToDelete) {
         return { success: false, error: 'User account not found to delete.' };
@@ -1003,9 +1096,28 @@ export const PortalProvider = ({ children }) => {
 
       // 3. Remove user from local state arrays
       if (userToDelete.role === 'student' || userToDelete.id.startsWith('std-')) {
-        setStudents((prev) => prev.filter((u) => u.id !== userToDelete.id && (u.personalEmail || '').toLowerCase() !== email));
+        setStudents((prev) => prev.filter((u) =>
+          u.id !== userToDelete.id
+          && u.firebaseUid !== uid
+          && (u.personalEmail || '').toLowerCase() !== email
+        ));
+        setInchargeRoster((prev) => ({
+          ...prev,
+          students: prev.students.filter((student) => student.firebaseUid !== uid),
+        }));
       } else if (userToDelete.role === 'supervisor' || userToDelete.id.startsWith('sup-')) {
-        setSupervisors((prev) => prev.filter((u) => u.id !== userToDelete.id && (u.personalEmail || '').toLowerCase() !== email));
+        setSupervisors((prev) => prev.filter((u) =>
+          u.id !== userToDelete.id
+          && u.firebaseUid !== uid
+          && (u.personalEmail || '').toLowerCase() !== email
+        ));
+        setInchargeRoster((prev) => ({
+          ...prev,
+          supervisors: prev.supervisors.filter((supervisor) => supervisor.firebaseUid !== uid),
+          students: prev.students.map((student) => student.assignedSupervisorUid === uid
+            ? { ...student, assignedSupervisorId: '', assignedSupervisorUid: null }
+            : student),
+        }));
       } else if (userToDelete.role === 'incharge' || userToDelete.id.startsWith('inc-')) {
         setInchargeUsers((prev) => prev.filter((u) => u.id !== userToDelete.id && (u.personalEmail || '').toLowerCase() !== email));
       } else if (userToDelete.role === 'hod' || userToDelete.id.startsWith('hod-')) {
@@ -1081,19 +1193,59 @@ export const PortalProvider = ({ children }) => {
   };
 
   const assignSupervisor = (studentId, supervisorId) => {
-    setStudents((prev) => prev.map((std) => {
-      if (std.id === studentId) {
-        return { ...std, assignedSupervisorId: supervisorId };
-      }
-      return std;
-    }));
-
-    if (currentUser?.id === studentId) {
-      setCurrentUser((prev) => ({ ...prev, assignedSupervisorId: supervisorId }));
+    const student = campusStudents.find((candidate) => candidate.id === studentId);
+    if (!student) {
+      showToast('Student account is no longer available in Firebase.', 'error');
+      return;
+    }
+    const availableSupervisors = currentUser?.role === 'incharge'
+      ? inchargeRoster.supervisors
+      : campusSupervisors;
+    const supervisor = supervisorId
+      ? availableSupervisors.find((candidate) => candidate.id === supervisorId)
+      : null;
+    if (supervisorId && !supervisor) {
+      showToast('Select a registered supervisor account.', 'error');
+      return;
     }
 
-    const supObj = supervisors.find((s) => s.id === supervisorId);
-    showToast(`Assigned supervisor ${supObj ? supObj.name : 'None'} to student.`);
+    const updatedStudent = {
+      ...student,
+      assignedSupervisorId: supervisor?.id || '',
+      assignedSupervisorUid: supervisor?.firebaseUid || null,
+    };
+    const matchesStudent = (candidate) => candidate.id === student.id
+      || Boolean(student.firebaseUid && candidate.firebaseUid === student.firebaseUid);
+    setStudents((previous) => {
+      const found = previous.some(matchesStudent);
+      const updated = previous.map((candidate) => matchesStudent(candidate) ? updatedStudent : candidate);
+      return deduplicateStudents(found ? updated : [updatedStudent, ...updated]);
+    });
+    if (currentUser?.role === 'incharge') {
+      setInchargeRoster((previous) => ({
+        ...previous,
+        students: previous.students.map((candidate) =>
+          candidate.id === student.id ? updatedStudent : candidate
+        ),
+      }));
+    }
+
+    if (currentUser?.id === studentId) {
+      setCurrentUser((prev) => ({ ...prev, ...updatedStudent }));
+    }
+
+    if (student.firebaseUid) {
+      saveUserRoleToFirestore(
+        student.firebaseUid,
+        student.personalEmail || student.email || '',
+        'student',
+        {
+          assignedSupervisorId: updatedStudent.assignedSupervisorId || null,
+          assignedSupervisorUid: updatedStudent.assignedSupervisorUid,
+        }
+      );
+    }
+    showToast(`Assigned supervisor ${supervisor ? supervisor.name : 'None'} to student.`);
   };
 
   const uploadStudentDocument = (studentId, { templateId, title, fileName, fileSize = '450 KB', studentSignatureDataUrl, fileDataUrl = null }) => {
@@ -1275,7 +1427,7 @@ export const PortalProvider = ({ children }) => {
   const getSupervisorForStudent = (student) => {
     if (!student || !student.assignedSupervisorId) return null;
     const availableSupervisors = currentUser?.role === 'incharge'
-      ? registeredCampusSupervisors
+      ? inchargeRoster.supervisors
       : supervisors;
     return availableSupervisors.find((s) => s.id === student.assignedSupervisorId) || null;
   };
@@ -1382,8 +1534,9 @@ export const PortalProvider = ({ children }) => {
         campuses: CAMPUSES,
         currentUser,
         setCurrentUser,
-        supervisors: currentUser?.role === 'incharge' ? registeredCampusSupervisors : campusSupervisors,
+        supervisors: currentUser?.role === 'incharge' ? inchargeRoster.supervisors : campusSupervisors,
         students: campusStudents,
+        inchargeRosterLoading,
         templates: campusTemplates,
         notices: NOTICES,
         inchargeUser,

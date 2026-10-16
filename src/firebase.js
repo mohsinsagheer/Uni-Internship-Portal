@@ -265,6 +265,18 @@ export const getUserRoleFromFirestore = async (uid, timeoutMs = 1200) => {
   return null;
 };
 
+export const getUsersByRoleFromFirestore = async (role) => {
+  const usersQuery = query(
+    collection(db, "users"),
+    where("role", "==", role)
+  );
+  const snapshot = await getDocs(usersQuery);
+  return snapshot.docs.map((userDoc) => ({
+    ...userDoc.data(),
+    firebaseUid: userDoc.id,
+  }));
+};
+
 export const formatFirebaseError = (error) => {
   if (!error) return 'An error occurred during authentication.';
   const code = error.code || '';
