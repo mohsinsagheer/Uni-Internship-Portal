@@ -470,7 +470,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
   // TAB: ALLOCATION (master roster + supervisor assignment)
   // ═══════════════════════════════════════════════════════════════
   if (activeTab === 'allocation' || activeTab === 'all_students') {
-    const allocationStudents = filteredStudents.filter((student) => student.status !== 'completed');
+    const allocationStudents = filteredStudents;
     return (
       <div className="space-y-6 fade-in">
         <SectionBanner icon={<UserPlus className="w-7 h-7 text-white" />}
