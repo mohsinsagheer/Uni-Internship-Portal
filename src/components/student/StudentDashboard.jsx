@@ -366,7 +366,7 @@ export default function StudentDashboard({
                       title="Click to upload or change profile picture"
                     >
                       <img
-                        src={currentUser?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=260&q=80'}
+                        src={currentUser?.avatar || '/cui-logo.png'}
                         alt={currentUser?.name}
                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
@@ -587,7 +587,7 @@ export default function StudentDashboard({
                   <div className="space-y-5">
                     <div className="flex items-start gap-5">
                       <img
-                        src={supervisor.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80'}
+                        src={supervisor.avatar || '/cui-logo.png'}
                         alt={supervisor.name}
                         className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-3 border-sky-500 shadow-lg shrink-0"
                       />

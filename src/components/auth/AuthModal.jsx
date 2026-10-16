@@ -1053,7 +1053,7 @@ export default function AuthModal({ isOpen, onClose }) {
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-3.5">
                 <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-[#c29b38] bg-slate-200 shrink-0">
                   <img
-                    src={currentUser?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80'}
+                    src={currentUser?.avatar || '/cui-logo.png'}
                     alt={currentUser?.name}
                     className="w-full h-full object-cover"
                   />

@@ -4,6 +4,7 @@ import { usePortal } from '../../context/PortalContext';
 
 export default memo(function NewsTicker() {
   const { notices } = usePortal();
+  if (!notices.length) return null;
 
   return (
     <div

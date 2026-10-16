@@ -100,7 +100,7 @@ export default memo(function Header({ onOpenAuth }) {
                   <div className="relative shrink-0">
                     <div className={`rounded-xl overflow-hidden border-2 border-[#c29b38] shadow-md ${scrolled ? 'w-8 h-8' : 'w-10 h-10 sm:w-11 sm:h-11'}`}>
                       <img
-                        src={currentUser?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80'}
+                        src={currentUser?.avatar || '/cui-logo.png'}
                         alt={`${currentUser?.name} profile photo`}
                         width="44"
                         height="44"

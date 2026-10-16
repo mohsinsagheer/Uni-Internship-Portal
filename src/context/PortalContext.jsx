@@ -1,23 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
-import {
-  CAMPUSES,
-  INITIAL_STUDENTS,
-  INITIAL_SUPERVISORS,
-  INITIAL_INCHARGES,
-  INITIAL_HODS,
-  OFFICIAL_TEMPLATES,
-  NOTICES
-} from '../data/initialData';
-import { hashPassword, verifyPasswordHash, ensureHashedPassword } from '../utils/crypto';
+import { CAMPUSES, NOTICES } from '../data/initialData';
+import { hashPassword, ensureHashedPassword } from '../utils/crypto';
 import {
   persistStudents,
   persistUsers,
-  persistTemplates,
   hydrateStudents,
   hydrateUsers,
-  hydrateTemplates,
   deleteDocumentBlobs,
-  deleteTemplateBlobs,
 } from '../utils/blobStore';
 import {
   auth,
@@ -31,6 +20,9 @@ import {
   saveUserRoleToFirestore,
   getUserRoleFromFirestore,
   getUsersByRoleFromFirestore,
+  getTemplatesFromFirestore,
+  saveTemplateToFirestore,
+  deleteTemplateFromFirestore,
   deleteUserFromFirestore,
   findUserInFirestoreByEmail,
   firebaseDeleteCurrentUser,
@@ -63,10 +55,23 @@ const PROFILE_FIELDS = [
   'department',
   'designation',
   'office',
+  'email',
+  'officialEmail',
 ];
 
-const getProfileFields = (data) => Object.fromEntries(
-  PROFILE_FIELDS
+const ACCOUNT_FIELDS = [
+  ...PROFILE_FIELDS,
+  'avatar',
+  'signature',
+  'documents',
+  'notifications',
+  'status',
+  'assignedSupervisorId',
+  'assignedSupervisorUid',
+];
+
+const getAccountFields = (data) => Object.fromEntries(
+  ACCOUNT_FIELDS
     .filter((field) => data?.[field] !== undefined)
     .map((field) => [field, data[field]])
 );
@@ -129,12 +134,10 @@ export const isUserMatch = (user, identifier) => {
 };
 
 const STORAGE_KEYS = {
-  CURRENT_USER: 'cui_portal_user',
   STUDENTS: 'cui_portal_students',
   SUPERVISORS: 'cui_portal_supervisors',
   INCHARGE: 'cui_portal_incharge',
   HOD: 'cui_portal_hod',
-  TEMPLATES: 'cui_portal_templates',
   CAMPUS: 'cui_portal_campus',
 };
 
@@ -197,51 +200,32 @@ export const PortalProvider = ({ children }) => {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
 
   const [supervisors, setSupervisors] = useState(() => {
-    const saved = asArray(readJson(STORAGE_KEYS.SUPERVISORS, null), INITIAL_SUPERVISORS);
+    const saved = asArray(readJson(STORAGE_KEYS.SUPERVISORS, null), []);
     return saved.map((item) => withCampus(item));
   });
 
   const [students, setStudents] = useState(() => {
     const saved = readJson(STORAGE_KEYS.STUDENTS, null);
-    if (saved) {
-      const hasLegacyDocs = Array.isArray(saved) && saved.some((s) =>
-        s.documents && s.documents.some((d) => ['tpl-1', 'tpl-2', 'tpl-3', 'tpl-4'].includes(d.templateId))
-      );
-      if (hasLegacyDocs) return INITIAL_STUDENTS;
-      return deduplicateStudents((Array.isArray(saved) ? saved : INITIAL_STUDENTS).map((item) => withCampus({
+    if (Array.isArray(saved)) {
+      return deduplicateStudents(saved.map((item) => withCampus({
         ...item,
         notifications: item.notifications || [],
       })));
     }
-    return INITIAL_STUDENTS;
+    return [];
   });
 
-  const [templates, setTemplates] = useState(() => {
-    const saved = readJson(STORAGE_KEYS.TEMPLATES, null);
-    if (saved) {
-      const hasLegacyDefaults = Array.isArray(saved) && saved.some((t) => ['tpl-1', 'tpl-2', 'tpl-3', 'tpl-4'].includes(t.id));
-      if (hasLegacyDefaults) {
-        localStorage.removeItem(STORAGE_KEYS.TEMPLATES);
-        return [];
-      }
-      return (Array.isArray(saved) ? saved : []).map((item) => withCampus(item));
-    }
-    return OFFICIAL_TEMPLATES;
-  });
+  const [templates, setTemplates] = useState([]);
 
   const [inchargeUsers, setInchargeUsers] = useState(() =>
-    asArray(readJson(STORAGE_KEYS.INCHARGE, null), INITIAL_INCHARGES).map((item) => withCampus({ ...item, role: 'incharge' }))
+    asArray(readJson(STORAGE_KEYS.INCHARGE, null), []).map((item) => withCampus({ ...item, role: 'incharge' }))
   );
 
   const [hodUsers, setHodUsers] = useState(() =>
-    asArray(readJson(STORAGE_KEYS.HOD, null), INITIAL_HODS).map((item) => withCampus({ ...item, role: 'hod' }))
+    asArray(readJson(STORAGE_KEYS.HOD, null), []).map((item) => withCampus({ ...item, role: 'hod' }))
   );
 
-  const [currentUser, setCurrentUser] = useState(() => {
-    const saved = readJson(STORAGE_KEYS.CURRENT_USER, null);
-    if (saved) return withCampus({ ...saved, notifications: saved.notifications || [] });
-    return null;
-  });
+  const [currentUser, setCurrentUser] = useState(null);
   const [inchargeRoster, setInchargeRoster] = useState({ students: [], supervisors: [] });
   const [inchargeRosterLoading, setInchargeRosterLoading] = useState(false);
 
@@ -260,6 +244,10 @@ export const PortalProvider = ({ children }) => {
   const [toastMessage, setToastMessage] = useState(null);
 
   useEffect(() => {
+    localStorage.removeItem('cui_portal_user');
+  }, []);
+
+  useEffect(() => {
     const onOnline = () => setIsOnline(true);
     const onOffline = () => setIsOnline(false);
     window.addEventListener('online', onOnline);
@@ -273,12 +261,11 @@ export const PortalProvider = ({ children }) => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [hydratedStudents, hydratedSupervisors, hydratedIncharge, hydratedHod, hydratedTemplates] = await Promise.all([
+      const [hydratedStudents, hydratedSupervisors, hydratedIncharge, hydratedHod] = await Promise.all([
         hydrateStudents(students),
         hydrateUsers(supervisors),
         hydrateUsers(inchargeUsers),
         hydrateUsers(hodUsers),
-        hydrateTemplates(templates),
       ]);
 
       const hashedStudents = await Promise.all(hydratedStudents.map(ensureHashedPassword));
@@ -286,18 +273,11 @@ export const PortalProvider = ({ children }) => {
       const hashedIncharge = await Promise.all(hydratedIncharge.map(ensureHashedPassword));
       const hashedHod = await Promise.all(hydratedHod.map(ensureHashedPassword));
 
-      if (currentUser) {
-        const hydratedCurrent = await hydrateUsers([currentUser]);
-        const hashedCurrent = await ensureHashedPassword(hydratedCurrent[0]);
-        if (!cancelled) setCurrentUser(hashedCurrent);
-      }
-
       if (cancelled) return;
       setStudents(deduplicateStudents(hashedStudents));
       setSupervisors(hashedSupervisors);
       setInchargeUsers(hashedIncharge);
       setHodUsers(hashedHod);
-      setTemplates(hydratedTemplates);
       persistReady.current = true;
     })();
     return () => { cancelled = true; };
@@ -326,22 +306,8 @@ export const PortalProvider = ({ children }) => {
   }, [hodUsers]);
 
   useEffect(() => {
-    if (!persistReady.current) return;
-    persistTemplates(templates).then((light) => localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(light)));
-  }, [templates]);
-
-  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.CAMPUS, selectedCampus);
   }, [selectedCampus]);
-
-  useEffect(() => {
-    if (!persistReady.current) return;
-    if (currentUser) {
-      persistUsers([currentUser]).then((light) => localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(light[0])));
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-    }
-  }, [currentUser]);
 
   // Keep refs in sync so onAuthStateChanged closure always sees latest state
   useEffect(() => { latestStudents.current = students; }, [students]);
@@ -359,51 +325,64 @@ export const PortalProvider = ({ children }) => {
       if (fbUser && fbUser.email) {
         // Enforce email verification on auth state restoration
         if (!fbUser.emailVerified) {
-          await firebaseLogout().catch(() => { });
           return;
         }
         try {
           const firestoreData = await getUserRoleFromFirestore(fbUser.uid);
-          // Search across all role arrays using latest ref values
-          const allUsers = [
-            ...latestStudents.current.map(u => ({ user: u, role: 'student' })),
-            ...latestSupervisors.current.map(u => ({ user: u, role: 'supervisor' })),
-            ...latestInchargeUsers.current.map(u => ({ user: u, role: 'incharge' })),
-            ...latestHodUsers.current.map(u => ({ user: u, role: 'hod' })),
-          ];
-          const found = allUsers.find(({ user }) => {
-            const userEmails = [user.email, user.personalEmail]
-              .filter(Boolean)
-              .map((email) => email.toLowerCase());
-            return userEmails.includes(fbUser.email.toLowerCase());
-          });
-          if (!found) return;
-
-          const role = firestoreData?.role || found.role;
-          const userCampus = firestoreData?.campusId || found.user.campusId || 'isb';
+          if (!firestoreData?.role || !['student', 'supervisor', 'incharge', 'hod'].includes(firestoreData.role)) {
+            await firebaseLogout();
+            return;
+          }
+          const role = firestoreData.role;
+          const roleUsers = role === 'student' ? latestStudents.current
+            : role === 'supervisor' ? latestSupervisors.current
+              : role === 'incharge' ? latestInchargeUsers.current
+                : role === 'hod' ? latestHodUsers.current : [];
+          const cachedUser = roleUsers.find((user) => user.firebaseUid === fbUser.uid);
+          const userCampus = firestoreData.campusId || cachedUser?.campusId || 'isb';
           const restoredUser = {
-            ...found.user,
-            ...getProfileFields(firestoreData),
+            ...getAccountFields(cachedUser),
+            ...getAccountFields(firestoreData),
+            id: `${role.slice(0, 3)}-${fbUser.uid}`,
+            regNo: firestoreData.regNo || cachedUser?.regNo || fbUser.email.split('@')[0].toUpperCase(),
+            name: firestoreData.name || cachedUser?.name || fbUser.displayName || fbUser.email,
+            email: firestoreData.officialEmail || cachedUser?.email || fbUser.email,
+            personalEmail: fbUser.email,
             role,
             campusId: userCampus,
             firebaseUid: fbUser.uid,
             needsProfileCompletion: firestoreData?.profileCompleted === true
-              ? false
-              : (found.user.needsProfileCompletion ?? true),
+              ? false : cachedUser?.needsProfileCompletion ?? true,
           };
           if (role === 'student') {
-            setStudents((prev) => prev.map((user) => user.id === restoredUser.id ? restoredUser : user));
+            setStudents((prev) => deduplicateStudents([
+              restoredUser,
+              ...prev.filter((user) => user.firebaseUid !== fbUser.uid),
+            ]));
           } else if (role === 'supervisor') {
-            setSupervisors((prev) => prev.map((user) => user.id === restoredUser.id ? restoredUser : user));
+            setSupervisors((prev) => [restoredUser, ...prev.filter((user) => user.firebaseUid !== fbUser.uid)]);
           } else if (role === 'incharge') {
-            setInchargeUsers((prev) => prev.map((user) => user.id === restoredUser.id ? restoredUser : user));
+            setInchargeUsers((prev) => [restoredUser, ...prev.filter((user) => user.firebaseUid !== fbUser.uid)]);
           } else if (role === 'hod') {
-            setHodUsers((prev) => prev.map((user) => user.id === restoredUser.id ? restoredUser : user));
+            setHodUsers((prev) => [restoredUser, ...prev.filter((user) => user.firebaseUid !== fbUser.uid)]);
           }
           setCurrentUser(restoredUser);
           setSelectedCampus(userCampus);
+          if (cachedUser) {
+            saveUserRoleToFirestore(
+              fbUser.uid,
+              fbUser.email,
+              role,
+              getAccountFields(restoredUser)
+            ).catch((err) => {
+              console.error('Failed to sync locally cached account data to Firebase:', err);
+            });
+          }
         } catch (err) {
-          console.warn('onAuthStateChanged error:', err);
+          console.error('Failed to restore signed-in account from Firebase:', err);
+          await firebaseLogout().catch((logoutError) => {
+            console.error('Failed to sign out after account restoration error:', logoutError);
+          });
         }
       }
     });
@@ -418,7 +397,7 @@ export const PortalProvider = ({ children }) => {
 
   const inchargeCampus = currentUser?.campusId || selectedCampus;
   useEffect(() => {
-    if (currentUser?.role !== 'incharge') {
+    if (!currentUser || currentUser.role === 'student') {
       setInchargeRoster({ students: [], supervisors: [] });
       setInchargeRosterLoading(false);
       return undefined;
@@ -476,21 +455,15 @@ export const PortalProvider = ({ children }) => {
               email: user.officialEmail || local?.email || user.email || '',
               personalEmail: user.personalEmail || user.email || local?.personalEmail || '',
               campusId: user.campusId || local?.campusId || 'isb',
-              documents: local?.documents || [],
-              notifications: local?.notifications || [],
-              status: local?.status || 'pending_submission',
+              documents: user.documents || local?.documents || [],
+              notifications: user.notifications || local?.notifications || [],
+              status: user.status || local?.status || 'pending_submission',
               assignedSupervisorId: supervisorIds.has(assignedSupervisorId) ? assignedSupervisorId : '',
             };
           }));
 
-        setStudents((previous) => deduplicateStudents([...studentsForCampus, ...previous]));
-        setSupervisors((previous) => {
-          const liveSupervisorIds = new Set(supervisorsForCampus.map((user) => user.firebaseUid));
-          return [
-            ...supervisorsForCampus,
-            ...previous.filter((user) => !liveSupervisorIds.has(user.firebaseUid)),
-          ];
-        });
+        setStudents(studentsForCampus);
+        setSupervisors(supervisorsForCampus);
         setInchargeRoster({ students: studentsForCampus, supervisors: supervisorsForCampus });
       } catch (err) {
         console.error('Failed to load incharge Firebase roster:', err);
@@ -511,17 +484,35 @@ export const PortalProvider = ({ children }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.role, inchargeCampus]);
 
+  useEffect(() => {
+    if (!currentUser) {
+      setTemplates([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const campusId = currentUser.campusId || selectedCampus;
+    getTemplatesFromFirestore(campusId)
+      .then((loadedTemplates) => {
+        if (!cancelled) setTemplates(loadedTemplates);
+      })
+      .catch((err) => {
+        console.error('Failed to load campus templates from Firebase:', err);
+        if (!cancelled) {
+          setTemplates([]);
+          showToast(`Could not load campus templates from Firebase: ${formatFirebaseError(err)}`, 'error');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.firebaseUid, currentUser?.campusId, selectedCampus]);
+
   const viewCampus = currentUser?.role === 'student'
     ? (currentUser.campusId || selectedCampus)
     : selectedCampus;
 
-  const localCampusStudents = useMemo(
-    () => deduplicateStudents(students.filter((s) => (s.campusId || 'isb') === viewCampus)),
-    [students, viewCampus]
-  );
-  const campusStudents = currentUser?.role === 'incharge'
-    ? inchargeRoster.students
-    : localCampusStudents;
+  const campusStudents = currentUser ? inchargeRoster.students : [];
   const campusSupervisors = useMemo(
     () => supervisors.filter((s) => (s.campusId || 'isb') === viewCampus),
     [supervisors, viewCampus]
@@ -650,76 +641,42 @@ export const PortalProvider = ({ children }) => {
       return { success: false, error: 'Please sign in with your personal email address, not your university email.' };
     }
 
-    // ── CROSS-ROLE CHECK 1: Local Account Match Role Enforcement ──
-    const localMatch = findAccountByPersonalEmail(cleanEmail);
-    if (localMatch && localMatch.role !== selectedRole) {
-      const actualRoleName = ROLE_NAMES[localMatch.role] || localMatch.role;
-      const attemptedRoleName = ROLE_NAMES[selectedRole] || selectedRole;
-      return {
-        success: false,
-        error: `Cross-Role Login Denied: Your account is registered as "${actualRoleName}", but you selected "${attemptedRoleName}". Please select "${actualRoleName}" to sign in.`
-      };
-    }
-
-    const targetEmail = cleanEmail;
-
-    // ── FIREBASE AUTHENTICATION & STRICT EMAIL VERIFICATION ──
-    let fbUserCredential = null;
-    let fbUser = null;
+    let fbUser;
     try {
-      fbUserCredential = await firebaseLogin(targetEmail, password);
-      fbUser = fbUserCredential?.user || null;
+      const credential = await firebaseLogin(cleanEmail, password);
+      fbUser = credential.user;
     } catch (err) {
-      console.warn('Firebase login notice:', err);
-
-      // Allow fallback ONLY for pre-seeded built-in demo faculty/incharge/HOD accounts that have no firebaseUid
-      if (localMatch && !localMatch.user.firebaseUid && !localMatch.user.personalEmail) {
-        const isPassValid = localMatch.user.password
-          ? await verifyPasswordHash(password, localMatch.user.password)
-          : true;
-
-        if (isPassValid) {
-          const registeredCampusId = localMatch.user.campusId || selectedCampus;
-          if (registeredCampusId && registeredCampusId !== selectedCampus) {
-            const registeredCampusObj = CAMPUSES.find((c) => c.id === registeredCampusId);
-            const selectedCampusObj = CAMPUSES.find((c) => c.id === selectedCampus);
-            const registeredCampusName = registeredCampusObj ? registeredCampusObj.name : registeredCampusId;
-            const selectedCampusName = selectedCampusObj ? selectedCampusObj.name : selectedCampus;
-            return {
-              success: false,
-              error: `Campus Mismatch Error: Your account is registered under "${registeredCampusName}". You selected "${selectedCampusName}". Please select your correct campus to log in.`
-            };
-          }
-
-          const updatedUser = { ...localMatch.user, role: localMatch.role, campusId: registeredCampusId, emailVerified: true };
-          setSelectedCampus(updatedUser.campusId || selectedCampus);
-          setCurrentUser(updatedUser);
-          showToast(`Welcome back, ${localMatch.user.name}! Logged in as ${ROLE_NAMES[localMatch.role] || localMatch.role}.`);
-          return { success: true };
-        }
-      }
       return { success: false, error: formatFirebaseError(err) };
     }
 
-    // ── MANDATORY EMAIL VERIFICATION GATEWAY ──
-    if (fbUser) {
-      await fbUser.reload();
-      if (!fbUser.emailVerified) {
-        await firebaseLogout().catch(() => { });
-        return {
-          success: false,
-          requiresVerification: true,
-          email: targetEmail,
-          password: password,
-          error: 'Your email address is not verified yet. Please check your inbox and click the verification link before logging in.'
-        };
-      }
+    await fbUser.reload();
+    if (!fbUser.emailVerified) {
+      await firebaseLogout();
+      return {
+        success: false,
+        requiresVerification: true,
+        email: cleanEmail,
+        password,
+        error: 'Your email address is not verified yet. Please check your inbox and click the verification link before logging in.'
+      };
     }
 
-    // ── CROSS-ROLE CHECK 2: Firestore Stored Role Metadata Enforcement ──
-    const firestoreData = fbUser ? await getUserRoleFromFirestore(fbUser.uid, 1200) : null;
-    if (firestoreData && firestoreData.role && firestoreData.role !== selectedRole) {
-      await firebaseLogout().catch(() => { });
+    let firestoreData;
+    try {
+      firestoreData = await getUserRoleFromFirestore(fbUser.uid, 8000);
+    } catch (err) {
+      await firebaseLogout();
+      return { success: false, error: `Could not load your account data from Firebase: ${err.message}` };
+    }
+    if (!firestoreData?.role) {
+      await firebaseLogout();
+      return {
+        success: false,
+        error: 'This Firebase account has no registered portal profile. Please create an account or contact the portal administrator.'
+      };
+    }
+    if (firestoreData.role !== selectedRole) {
+      await firebaseLogout();
       const actualRoleName = ROLE_NAMES[firestoreData.role] || firestoreData.role;
       const attemptedRoleName = ROLE_NAMES[selectedRole] || selectedRole;
       return {
@@ -729,9 +686,9 @@ export const PortalProvider = ({ children }) => {
     }
 
     // ── CAMPUS VERIFICATION CHECK: Firestore & User Record Campus Enforcement ──
-    const registeredCampusId = firestoreData?.campusId || localMatch?.user?.campusId;
+    const registeredCampusId = firestoreData.campusId || selectedCampus;
     if (registeredCampusId && registeredCampusId !== selectedCampus) {
-      await firebaseLogout().catch(() => { });
+      await firebaseLogout();
       const registeredCampusObj = CAMPUSES.find((c) => c.id === registeredCampusId);
       const selectedCampusObj = CAMPUSES.find((c) => c.id === selectedCampus);
       const registeredCampusName = registeredCampusObj ? registeredCampusObj.name : registeredCampusId;
@@ -742,83 +699,47 @@ export const PortalProvider = ({ children }) => {
       };
     }
 
-    let match = localMatch;
-
-    // If account doesn't exist in local state arrays, create it dynamically under verified role
-    if (!match) {
-      const cleanRegNo = firestoreData?.regNo || cleanEmail.split('@')[0].toUpperCase();
-      const newRecord = {
-        id: `${selectedRole.slice(0, 3)}-${Date.now()}`,
-        firebaseUid: fbUser?.uid || null,
-        regNo: cleanRegNo,
-        name: firestoreData?.name || fbUser?.displayName || cleanRegNo,
-        email: firestoreData?.officialEmail || fbUser?.email || targetEmail,
-        personalEmail: fbUser?.email || targetEmail,
-        campusId: selectedCampus,
-        role: selectedRole,
-        emailVerified: true,
-        notifications: [],
-        documents: [],
-        ...getProfileFields(firestoreData),
-        needsProfileCompletion: firestoreData?.profileCompleted !== true,
-      };
-
-      if (selectedRole === 'student') {
-        setStudents((prev) => deduplicateStudents([newRecord, ...prev]));
-      } else if (selectedRole === 'supervisor') {
-        setSupervisors((prev) => [...prev, newRecord]);
-      } else if (selectedRole === 'incharge') {
-        setInchargeUsers((prev) => [...prev, newRecord]);
-      } else if (selectedRole === 'hod') {
-        setHodUsers((prev) => [...prev, newRecord]);
-      }
-      match = { user: newRecord, role: selectedRole };
-
-      // Save role mapping & campusId to Firestore in background
-      if (fbUser?.uid) {
-        saveUserRoleToFirestore(fbUser.uid, targetEmail, selectedRole, {
-          regNo: cleanRegNo,
-          personalEmail: targetEmail,
-          name: newRecord.name,
-          campusId: selectedCampus,
-          profileCompleted: firestoreData?.profileCompleted === true,
-          emailVerified: true,
-        });
-      }
-    } else {
-      // Sync campusId to Firestore in background
-      if (fbUser?.uid && firestoreData && !firestoreData.campusId) {
-        saveUserRoleToFirestore(fbUser.uid, targetEmail, selectedRole, {
-          campusId: match.user.campusId || selectedCampus,
-          emailVerified: true,
-        });
-      }
-    }
-
+    const accountList = selectedRole === 'student' ? latestStudents.current
+      : selectedRole === 'supervisor' ? latestSupervisors.current
+        : selectedRole === 'incharge' ? latestInchargeUsers.current : latestHodUsers.current;
+    const cachedUser = accountList.find((user) => user.firebaseUid === fbUser.uid);
     const updatedUser = {
-      ...match.user,
-      ...getProfileFields(firestoreData),
-      role: match.role,
-      campusId: registeredCampusId || match.user.campusId || selectedCampus,
-      firebaseUid: fbUser?.uid,
+      ...getAccountFields(cachedUser),
+      ...getAccountFields(firestoreData),
+      id: `${selectedRole.slice(0, 3)}-${fbUser.uid}`,
+      regNo: firestoreData.regNo || cachedUser?.regNo || cleanEmail.split('@')[0].toUpperCase(),
+      name: firestoreData.name || cachedUser?.name || fbUser.displayName || cleanEmail,
+      email: firestoreData.officialEmail || cachedUser?.email || cleanEmail,
+      personalEmail: cleanEmail,
+      role: selectedRole,
+      campusId: registeredCampusId,
+      firebaseUid: fbUser.uid,
       emailVerified: true,
-      needsProfileCompletion: firestoreData?.profileCompleted === true
-        ? false
-        : (match.user.needsProfileCompletion ?? true),
+      needsProfileCompletion: firestoreData.profileCompleted === true ? false : true,
     };
-    if (match.role === 'student') {
-      setStudents((prev) => prev.map((user) => user.id === updatedUser.id ? updatedUser : user));
-    } else if (match.role === 'supervisor') {
-      setSupervisors((prev) => prev.map((user) => user.id === updatedUser.id ? updatedUser : user));
-    } else if (match.role === 'incharge') {
-      setInchargeUsers((prev) => prev.map((user) => user.id === updatedUser.id ? updatedUser : user));
+    if (selectedRole === 'student') {
+      setStudents((prev) => deduplicateStudents([updatedUser, ...prev.filter((user) => user.firebaseUid !== fbUser.uid)]));
+    } else if (selectedRole === 'supervisor') {
+      setSupervisors((prev) => [updatedUser, ...prev.filter((user) => user.firebaseUid !== fbUser.uid)]);
+    } else if (selectedRole === 'incharge') {
+      setInchargeUsers((prev) => [updatedUser, ...prev.filter((user) => user.firebaseUid !== fbUser.uid)]);
     } else {
-      setHodUsers((prev) => prev.map((user) => user.id === updatedUser.id ? updatedUser : user));
+      setHodUsers((prev) => [updatedUser, ...prev.filter((user) => user.firebaseUid !== fbUser.uid)]);
     }
-    setSelectedCampus(updatedUser.campusId || selectedCampus);
+    setSelectedCampus(registeredCampusId);
     setCurrentUser(updatedUser);
 
-    showToast(`Welcome back, ${match.user.name}! Logged in as ${ROLE_NAMES[match.role] || match.role}.`);
+    saveUserRoleToFirestore(
+      fbUser.uid,
+      cleanEmail,
+      selectedRole,
+      getAccountFields(updatedUser)
+    ).catch((err) => {
+      console.error('Failed to sync account data to Firebase:', err);
+      showToast(`Could not sync saved account data to Firebase: ${formatFirebaseError(err)}`, 'error');
+    });
+
+    showToast(`Welcome back, ${updatedUser.name}! Logged in as ${ROLE_NAMES[selectedRole] || selectedRole}.`);
     return { success: true };
   };
 
@@ -853,10 +774,15 @@ export const PortalProvider = ({ children }) => {
     // ── DUPLICATE ACCOUNT CHECK across ALL roles ──
     const existing = findAccountByPersonalEmail(personalEmail) || findAccount(officialEmail) || findAccount(cleanRegNo);
     if (existing) {
-      // Check if this account actually still exists in Firestore database
-      const activeInDb = existing.user.firebaseUid
-        ? await getUserRoleFromFirestore(existing.user.firebaseUid)
-        : await findUserInFirestoreByEmail(personalEmail);
+      let activeInDb;
+      try {
+        activeInDb = existing.user.firebaseUid
+          ? await getUserRoleFromFirestore(existing.user.firebaseUid)
+          : await findUserInFirestoreByEmail(personalEmail);
+      } catch (err) {
+        console.error('Failed to verify duplicate account against Firebase:', err);
+        return { success: false, error: `Could not verify existing account data in Firebase: ${formatFirebaseError(err)}` };
+      }
 
       // If it only exists in stale browser state but was deleted from the database, purge it!
       if (!activeInDb) {
@@ -878,69 +804,62 @@ export const PortalProvider = ({ children }) => {
       }
     }
 
-    // Register user in Firebase Authentication (dispatches verification link and signs out)
+    const newRecord = {
+      regNo: cleanRegNo,
+      personalEmail,
+      officialEmail,
+      name: userData.name.trim(),
+      campusId,
+      program: userData.program || null,
+      semester: userData.semester || null,
+      internshipCompany: userData.internshipCompany || null,
+      internshipRole: userData.internshipRole || null,
+      role: userData.role,
+      profileCompleted: false,
+      emailVerified: false,
+      status: 'pending_submission',
+      documents: [],
+      notifications: [],
+    };
+
     let firebaseUid = null;
     try {
-      const userCred = await firebaseSignup(personalEmail, userData.password, userData.name);
+      const userCred = await firebaseSignup(
+        personalEmail,
+        userData.password,
+        userData.name,
+        newRecord
+      );
       firebaseUid = userCred?.user?.uid || null;
     } catch (fbErr) {
       console.error('Firebase signup error:', fbErr);
       return { success: false, error: formatFirebaseError(fbErr) };
     }
 
-    // Store user role and email in Firebase Firestore asynchronously without blocking
-    if (firebaseUid) {
-      saveUserRoleToFirestore(firebaseUid, personalEmail, userData.role, {
-        regNo: cleanRegNo,
-        personalEmail,
-        officialEmail,
-        name: userData.name.trim(),
-        campusId,
-        profileCompleted: false,
-        emailVerified: false,
-      });
-    }
-
-    const hashed = await hashPassword(userData.password);
-
-    const newRecord = {
-      id: `${userData.role.slice(0, 3)}-${Date.now()}`,
+    const localRecord = {
+      id: `${userData.role.slice(0, 3)}-${firebaseUid}`,
       firebaseUid,
-      regNo: cleanRegNo,
-      name: userData.name.trim(),
-      email: officialEmail,
-      personalEmail,
-      password: hashed,
-      campusId,
-      role: userData.role,
-      emailVerified: false,
-      program: userData.program || null,
-      semester: userData.semester || null,
+      ...newRecord,
       cgpa: null,
       creditHoursCompleted: null,
       phone: null,
       department: null,
       office: null,
       assignedSupervisorId: null,
-      internshipCompany: userData.internshipCompany || null,
-      internshipRole: userData.internshipRole || null,
       internshipMode: null,
       internshipDuration: null,
-      status: 'pending_submission',
       avatar: null,
-      documents: [],
-      notifications: [],
       needsProfileCompletion: true,
     };
 
     if (userData.role === 'student') {
-      setStudents((prev) => deduplicateStudents([newRecord, ...prev]));
+      setStudents((prev) => deduplicateStudents([localRecord, ...prev]));
     } else if (userData.role === 'supervisor') {
-      setSupervisors((prev) => [...prev, newRecord]);
+      setSupervisors((prev) => [...prev, localRecord]);
     } else if (userData.role === 'incharge') {
-      setInchargeUsers((prev) => [...prev, newRecord]);
+      setInchargeUsers((prev) => [...prev, localRecord]);
     } else if (userData.role === 'hod') {
-      setHodUsers((prev) => [...prev, newRecord]);
+      setHodUsers((prev) => [...prev, localRecord]);
     }
 
     // IMPORTANT: Do NOT call setCurrentUser!
@@ -1142,8 +1061,12 @@ export const PortalProvider = ({ children }) => {
     }
   };
 
-  const updateUserProfile = (updatedFields) => {
+  const updateUserProfile = async (updatedFields) => {
     if (!currentUser) return;
+    if (!currentUser.firebaseUid) {
+      showToast('Your signed-in Firebase account is missing. Sign in again before saving changes.', 'error');
+      return;
+    }
 
     const sanitizedFields = Object.fromEntries(
       Object.entries(updatedFields || {}).map(([key, value]) => [key, value === '' ? null : value])
@@ -1154,17 +1077,21 @@ export const PortalProvider = ({ children }) => {
       ...sanitizedFields,
       needsProfileCompletion: false,
     };
-    setCurrentUser(updated);
 
-    if (currentUser.firebaseUid) {
-      saveUserRoleToFirestore(
+    try {
+      await saveUserRoleToFirestore(
         currentUser.firebaseUid,
         currentUser.personalEmail || currentUser.email || '',
         currentUser.role,
         { ...sanitizedFields, profileCompleted: true }
       );
+    } catch (err) {
+      console.error('Failed to save account profile to Firebase:', err);
+      showToast(`Could not save your profile to Firebase: ${formatFirebaseError(err)}`, 'error');
+      return;
     }
 
+    setCurrentUser(updated);
     if (currentUser.role === 'student') {
       setStudents((prev) => prev.map((std) => std.id === currentUser.id ? { ...std, ...sanitizedFields, needsProfileCompletion: false } : std));
     } else if (currentUser.role === 'supervisor') {
@@ -1177,8 +1104,24 @@ export const PortalProvider = ({ children }) => {
     showToast('Official profile details updated successfully!');
   };
 
-  const updateUserAvatar = (newAvatarUrl) => {
+  const updateUserAvatar = async (newAvatarUrl) => {
     if (!currentUser) return;
+    if (!currentUser.firebaseUid) {
+      showToast('Your signed-in Firebase account is missing. Sign in again before saving changes.', 'error');
+      return;
+    }
+    try {
+      await saveUserRoleToFirestore(
+        currentUser.firebaseUid,
+        currentUser.personalEmail || currentUser.email || '',
+        currentUser.role,
+        { avatar: newAvatarUrl }
+      );
+    } catch (err) {
+      console.error('Failed to save profile photo to Firebase:', err);
+      showToast(`Could not save your profile photo to Firebase: ${formatFirebaseError(err)}`, 'error');
+      return;
+    }
     setCurrentUser((prev) => ({ ...prev, avatar: newAvatarUrl }));
     if (currentUser.role === 'student') {
       setStudents((prev) => prev.map((std) => std.id === currentUser.id ? { ...std, avatar: newAvatarUrl } : std));
@@ -1192,7 +1135,36 @@ export const PortalProvider = ({ children }) => {
     showToast('Profile photo updated successfully!');
   };
 
-  const assignSupervisor = (studentId, supervisorId) => {
+  const persistStudentFields = async (student, fields) => {
+    if (!student?.firebaseUid) {
+      throw new Error('The registered student account has no Firebase UID.');
+    }
+    await saveUserRoleToFirestore(
+      student.firebaseUid,
+      student.personalEmail || student.email || '',
+      'student',
+      fields
+    );
+  };
+
+  const updateStudentLocally = (updatedStudent) => {
+    const matchesStudent = (candidate) => candidate.id === updatedStudent.id
+      || Boolean(updatedStudent.firebaseUid && candidate.firebaseUid === updatedStudent.firebaseUid);
+    setStudents((previous) => previous.map((candidate) =>
+      matchesStudent(candidate) ? updatedStudent : candidate
+    ));
+    setInchargeRoster((previous) => ({
+      ...previous,
+      students: previous.students.map((candidate) =>
+        matchesStudent(candidate) ? updatedStudent : candidate
+      ),
+    }));
+    if (currentUser?.firebaseUid === updatedStudent.firebaseUid) {
+      setCurrentUser((previous) => ({ ...previous, ...updatedStudent }));
+    }
+  };
+
+  const assignSupervisor = async (studentId, supervisorId) => {
     const student = campusStudents.find((candidate) => candidate.id === studentId);
     if (!student) {
       showToast('Student account is no longer available in Firebase.', 'error');
@@ -1214,41 +1186,29 @@ export const PortalProvider = ({ children }) => {
       assignedSupervisorId: supervisor?.id || '',
       assignedSupervisorUid: supervisor?.firebaseUid || null,
     };
-    const matchesStudent = (candidate) => candidate.id === student.id
-      || Boolean(student.firebaseUid && candidate.firebaseUid === student.firebaseUid);
-    setStudents((previous) => {
-      const found = previous.some(matchesStudent);
-      const updated = previous.map((candidate) => matchesStudent(candidate) ? updatedStudent : candidate);
-      return deduplicateStudents(found ? updated : [updatedStudent, ...updated]);
-    });
-    if (currentUser?.role === 'incharge') {
-      setInchargeRoster((previous) => ({
-        ...previous,
-        students: previous.students.map((candidate) =>
-          candidate.id === student.id ? updatedStudent : candidate
-        ),
-      }));
+    try {
+      await persistStudentFields(updatedStudent, {
+        assignedSupervisorId: updatedStudent.assignedSupervisorId || null,
+        assignedSupervisorUid: updatedStudent.assignedSupervisorUid,
+      });
+    } catch (err) {
+      console.error('Failed to save supervisor assignment to Firebase:', err);
+      showToast(`Could not save supervisor assignment: ${formatFirebaseError(err)}`, 'error');
+      return;
     }
 
-    if (currentUser?.id === studentId) {
-      setCurrentUser((prev) => ({ ...prev, ...updatedStudent }));
-    }
+    updateStudentLocally(updatedStudent);
 
-    if (student.firebaseUid) {
-      saveUserRoleToFirestore(
-        student.firebaseUid,
-        student.personalEmail || student.email || '',
-        'student',
-        {
-          assignedSupervisorId: updatedStudent.assignedSupervisorId || null,
-          assignedSupervisorUid: updatedStudent.assignedSupervisorUid,
-        }
-      );
-    }
     showToast(`Assigned supervisor ${supervisor ? supervisor.name : 'None'} to student.`);
   };
 
-  const uploadStudentDocument = (studentId, { templateId, title, fileName, fileSize = '450 KB', studentSignatureDataUrl, fileDataUrl = null }) => {
+  const uploadStudentDocument = async (studentId, { templateId, title, fileName, fileSize = '450 KB', studentSignatureDataUrl, fileDataUrl = null }) => {
+    const student = campusStudents.find((candidate) => candidate.id === studentId)
+      || (currentUser?.id === studentId ? currentUser : null);
+    if (!student) {
+      showToast('Your student account could not be found. Please sign in again.', 'error');
+      return;
+    }
     const newDocId = `doc-${studentId}-${Date.now()}`;
     const newDoc = {
       id: newDocId,
@@ -1272,35 +1232,30 @@ export const PortalProvider = ({ children }) => {
       hodSignedAt: null,
       feedback: 'Document submitted by student with digital canvas signature.'
     };
-
-    setStudents((prev) => prev.map((std) => {
-      if (std.id === studentId) {
-        const updatedDocs = [...(std.documents || []), newDoc];
-        return {
-          ...std,
-          documents: updatedDocs,
-          status: getStudentOverallStatus(updatedDocs, std.campusId)
-        };
-      }
-      return std;
-    }));
-
-    if (currentUser?.id === studentId) {
-      setCurrentUser((prev) => {
-        const updatedDocs = [...(prev.documents || []), newDoc];
-        return {
-          ...prev,
-          documents: updatedDocs,
-          status: getStudentOverallStatus(updatedDocs, prev.campusId)
-        };
+    const updatedDocs = [...(student.documents || []), newDoc];
+    const updatedStudent = {
+      ...student,
+      documents: updatedDocs,
+      status: getStudentOverallStatus(updatedDocs, student.campusId),
+    };
+    try {
+      await persistStudentFields(updatedStudent, {
+        documents: updatedDocs,
+        status: updatedStudent.status,
       });
+    } catch (err) {
+      console.error('Failed to save student submission to Firebase:', err);
+      showToast(`Could not save the document to Firebase: ${formatFirebaseError(err)}`, 'error');
+      return;
     }
-
+    updateStudentLocally(updatedStudent);
     showToast('Internship document uploaded & signed successfully! Forwarded to Faculty Supervisor.');
   };
 
   const deleteStudentDocument = async (studentId, docId) => {
-    const removed = (students.find((std) => std.id === studentId)?.documents || []).find((doc) => doc.id === docId);
+    const student = campusStudents.find((candidate) => candidate.id === studentId)
+      || (currentUser?.id === studentId ? currentUser : null);
+    const removed = (student?.documents || []).find((doc) => doc.id === docId);
     if (!removed) return;
 
     if (removed.inchargeSigned || removed.hodSigned) {
@@ -1308,94 +1263,74 @@ export const PortalProvider = ({ children }) => {
       return;
     }
 
-    await deleteDocumentBlobs(removed);
-
-    setStudents((prev) => prev.map((std) => {
-      if (std.id !== studentId) return std;
-      const updatedDocs = (std.documents || []).filter((doc) => doc.id !== docId);
-      return {
-        ...std,
+    const updatedDocs = student.documents.filter((doc) => doc.id !== docId);
+    const updatedStudent = {
+      ...student,
+      documents: updatedDocs,
+      status: getStudentOverallStatus(updatedDocs, student.campusId),
+    };
+    try {
+      await persistStudentFields(updatedStudent, {
         documents: updatedDocs,
-        status: getStudentOverallStatus(updatedDocs, std.campusId),
-      };
-    }));
-
-    if (currentUser?.id === studentId) {
-      setCurrentUser((prev) => {
-        const updatedDocs = (prev.documents || []).filter((doc) => doc.id !== docId);
-        return {
-          ...prev,
-          documents: updatedDocs,
-          status: getStudentOverallStatus(updatedDocs, prev.campusId),
-        };
+        status: updatedStudent.status,
       });
+      await deleteDocumentBlobs(removed);
+    } catch (err) {
+      console.error('Failed to delete student submission from Firebase:', err);
+      showToast(`Could not delete the document: ${formatFirebaseError(err)}`, 'error');
+      return;
     }
-
+    updateStudentLocally(updatedStudent);
     showToast(`Document "${removed.title}" deleted from your submissions.`);
   };
 
-  const signDocument = (studentId, docId, signerRole, signatureDataUrl, note = '') => {
-    const now = new Date().toISOString();
-
-    setStudents((prev) => prev.map((std) => {
-      if (std.id !== studentId) return std;
-
-      const updatedDocs = (std.documents || []).map((doc) => {
-        if (doc.id !== docId) return doc;
-        const updatedDoc = { ...doc };
-
-        if (signerRole === 'student') {
-          updatedDoc.studentSigned = true;
-          updatedDoc.studentSignature = signatureDataUrl;
-          updatedDoc.studentSignedAt = now;
-        } else if (signerRole === 'supervisor') {
-          updatedDoc.supervisorSigned = true;
-          updatedDoc.supervisorSignature = signatureDataUrl;
-          updatedDoc.supervisorSignedAt = now;
-          updatedDoc.feedback = note || 'Approved and endorsed by Faculty Supervisor.';
-        } else if (signerRole === 'incharge') {
-          updatedDoc.inchargeSigned = true;
-          updatedDoc.inchargeSignature = signatureDataUrl;
-          updatedDoc.inchargeSignedAt = now;
-          updatedDoc.inchargeSignerId = currentUser?.id || null;
-          updatedDoc.feedback = note || 'Vetted and stamped by Internship Incharge.';
-        } else if (signerRole === 'hod') {
-          updatedDoc.hodSigned = true;
-          updatedDoc.hodSignature = signatureDataUrl;
-          updatedDoc.hodSignedAt = now;
-          updatedDoc.hodSignerId = currentUser?.id || null;
-          updatedDoc.feedback = note || 'Departmental approval granted for this document. Remaining internship files must also be completed before 3 credits are awarded.';
-        }
-
-        return updatedDoc;
-      });
-
-      return {
-        ...std,
-        status: getStudentOverallStatus(updatedDocs, std.campusId),
-        documents: updatedDocs
-      };
-    }));
-
-    if (currentUser?.id === studentId) {
-      setCurrentUser((prev) => {
-        const updatedDocs = (prev.documents || []).map((doc) => {
-          if (doc.id !== docId) return doc;
-          return {
-            ...doc,
-            [`${signerRole}Signed`]: true,
-            [`${signerRole}Signature`]: signatureDataUrl,
-            [`${signerRole}SignedAt`]: now,
-          };
-        });
-        return { ...prev, documents: updatedDocs, status: getStudentOverallStatus(updatedDocs, prev.campusId) };
-      });
+  const signDocument = async (studentId, docId, signerRole, signatureDataUrl, note = '') => {
+    const student = campusStudents.find((candidate) => candidate.id === studentId)
+      || (currentUser?.id === studentId ? currentUser : null);
+    if (!student) {
+      showToast('Student account could not be found in Firebase.', 'error');
+      return;
     }
-
+    const now = new Date().toISOString();
+    const updatedDocs = (student.documents || []).map((doc) => {
+      if (doc.id !== docId) return doc;
+      const updatedDoc = {
+        ...doc,
+        [`${signerRole}Signed`]: true,
+        [`${signerRole}Signature`]: signatureDataUrl,
+        [`${signerRole}SignedAt`]: now,
+      };
+      if (signerRole === 'supervisor') {
+        updatedDoc.feedback = note || 'Approved and endorsed by Faculty Supervisor.';
+      } else if (signerRole === 'incharge') {
+        updatedDoc.inchargeSignerId = currentUser?.id || null;
+        updatedDoc.feedback = note || 'Vetted and stamped by Internship Incharge.';
+      } else if (signerRole === 'hod') {
+        updatedDoc.hodSignerId = currentUser?.id || null;
+        updatedDoc.feedback = note || 'Departmental approval granted for this document. Remaining internship files must also be completed before 3 credits are awarded.';
+      }
+      return updatedDoc;
+    });
+    const updatedStudent = {
+      ...student,
+      documents: updatedDocs,
+      status: getStudentOverallStatus(updatedDocs, student.campusId),
+    };
+    try {
+      await persistStudentFields(updatedStudent, {
+        documents: updatedDocs,
+        status: updatedStudent.status,
+      });
+    } catch (err) {
+      console.error('Failed to save document signature to Firebase:', err);
+      showToast(`Could not save the signature: ${formatFirebaseError(err)}`, 'error');
+      return;
+    }
+    updateStudentLocally(updatedStudent);
     showToast(`Signature endorsed as ${signerRole.toUpperCase()} successfully!`);
   };
 
-  const addTemplate = (templateData) => {
+  const addTemplate = async (templateData) => {
     const newTpl = {
       id: `tpl-${Date.now()}`,
       campusId: currentUser?.campusId || selectedCampus,
@@ -1412,6 +1347,13 @@ export const PortalProvider = ({ children }) => {
       uploadedBy: currentUser?.name || 'Internship Incharge Office',
       requiredSignatures: templateData.requiredSignatures || ['student', 'supervisor', 'incharge'],
     };
+    try {
+      await saveTemplateToFirestore(newTpl);
+    } catch (err) {
+      console.error('Failed to save campus template to Firebase:', err);
+      showToast(`Could not save the template to Firebase: ${formatFirebaseError(err)}`, 'error');
+      return;
+    }
     setTemplates((prev) => [newTpl, ...prev]);
     showToast(`New official template "${newTpl.title}" published to portal.`);
   };
@@ -1419,7 +1361,13 @@ export const PortalProvider = ({ children }) => {
   const deleteTemplate = async (templateId) => {
     const removed = templates.find((t) => t.id === templateId);
     if (!removed) return;
-    await deleteTemplateBlobs(removed);
+    try {
+      await deleteTemplateFromFirestore(removed);
+    } catch (err) {
+      console.error('Failed to delete campus template from Firebase:', err);
+      showToast(`Could not delete the template: ${formatFirebaseError(err)}`, 'error');
+      return;
+    }
     setTemplates((prev) => prev.filter((t) => t.id !== templateId));
     showToast(`Official template "${removed.title}" deleted from the repository.`);
   };
@@ -1437,8 +1385,8 @@ export const PortalProvider = ({ children }) => {
     return getStudentOverallStatus(Array.isArray(student.documents) ? student.documents : [], student.campusId);
   };
 
-  const sendReminder = (studentId, message) => {
-    const student = students.find((s) => s.id === studentId);
+  const sendReminder = async (studentId, message) => {
+    const student = campusStudents.find((candidate) => candidate.id === studentId);
     if (!student) return;
     const notification = {
       id: `ntf-${Date.now()}`,
@@ -1449,25 +1397,37 @@ export const PortalProvider = ({ children }) => {
       createdAt: new Date().toISOString(),
       read: false,
     };
-    setStudents((prev) => prev.map((s) => s.id === studentId
-      ? { ...s, notifications: [notification, ...(s.notifications || [])] }
-      : s));
-    if (currentUser?.id === studentId) {
-      setCurrentUser((prev) => ({ ...prev, notifications: [notification, ...(prev.notifications || [])] }));
+    const updatedStudent = {
+      ...student,
+      notifications: [notification, ...(student.notifications || [])],
+    };
+    try {
+      await persistStudentFields(updatedStudent, { notifications: updatedStudent.notifications });
+    } catch (err) {
+      console.error('Failed to save student reminder to Firebase:', err);
+      showToast(`Could not save the reminder: ${formatFirebaseError(err)}`, 'error');
+      return;
     }
+    updateStudentLocally(updatedStudent);
     showToast(`Reminder delivered to ${student.name} (${student.regNo}).`);
   };
 
-  const markNotificationsRead = (studentId) => {
-    setStudents((prev) => prev.map((s) => s.id === studentId
-      ? { ...s, notifications: (s.notifications || []).map((n) => ({ ...n, read: true })) }
-      : s));
-    if (currentUser?.id === studentId) {
-      setCurrentUser((prev) => ({
-        ...prev,
-        notifications: (prev.notifications || []).map((n) => ({ ...n, read: true })),
-      }));
+  const markNotificationsRead = async (studentId) => {
+    const student = campusStudents.find((candidate) => candidate.id === studentId)
+      || (currentUser?.id === studentId ? currentUser : null);
+    if (!student) return;
+    const updatedStudent = {
+      ...student,
+      notifications: (student.notifications || []).map((notification) => ({ ...notification, read: true })),
+    };
+    try {
+      await persistStudentFields(updatedStudent, { notifications: updatedStudent.notifications });
+    } catch (err) {
+      console.error('Failed to update student notifications in Firebase:', err);
+      showToast(`Could not update notifications: ${formatFirebaseError(err)}`, 'error');
+      return;
     }
+    updateStudentLocally(updatedStudent);
   };
 
   const getFilteredStudents = (forSupervisorId = null) => {
@@ -1534,7 +1494,7 @@ export const PortalProvider = ({ children }) => {
         campuses: CAMPUSES,
         currentUser,
         setCurrentUser,
-        supervisors: currentUser?.role === 'incharge' ? inchargeRoster.supervisors : campusSupervisors,
+        supervisors: currentUser ? inchargeRoster.supervisors : [],
         students: campusStudents,
         inchargeRosterLoading,
         templates: campusTemplates,

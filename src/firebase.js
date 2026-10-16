@@ -22,6 +22,13 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
+import {
+  getStorage,
+  ref,
+  uploadString,
+  getDownloadURL,
+  deleteObject,
+} from "firebase/storage";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -40,6 +47,7 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase Auth & Firestore
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+const storage = getStorage(app);
 
 // Initialize Analytics (supported in browser environment)
 export let analytics;
@@ -136,7 +144,7 @@ export const firebaseDeleteCurrentUser = async () => {
   }
 };
 
-export const firebaseSignup = async (email, password, displayName) => {
+export const firebaseSignup = async (email, password, displayName, accountData) => {
   const cleanEmail = email.trim().toLowerCase();
   let userCredential = null;
 
@@ -173,9 +181,20 @@ export const firebaseSignup = async (email, password, displayName) => {
   }
 
   if (displayName && userCredential.user) {
-    updateProfile(userCredential.user, { displayName }).catch((err) => {
-      console.warn("Profile update notice:", err);
-    });
+    await updateProfile(userCredential.user, { displayName });
+  }
+  if (userCredential.user && accountData) {
+    try {
+      await saveUserRoleToFirestore(
+        userCredential.user.uid,
+        cleanEmail,
+        accountData.role,
+        accountData
+      );
+    } catch (err) {
+      await signOut(auth);
+      throw err;
+    }
   }
   if (userCredential.user) {
     try {
@@ -227,40 +246,68 @@ export const firebaseResetPassword = async (email) => {
   return await sendPasswordResetEmail(auth, email);
 };
 
-// Store user role and email in Firebase Firestore (asynchronous non-blocking)
-export const saveUserRoleToFirestore = (uid, email, role, extraData = {}) => {
-  try {
-    const userRef = doc(db, "users", uid);
-    return setDoc(userRef, {
-      uid,
-      email: email.toLowerCase(),
-      role,
-      updatedAt: new Date().toISOString(),
-      ...extraData,
-    }, { merge: true }).catch((err) => {
-      console.warn("Firestore save user role notice:", err);
-    });
-  } catch (err) {
-    console.warn("Firestore save user role notice:", err);
-    return Promise.resolve();
+const persistAccountAsset = async (uid, path, value) => {
+  if (typeof value !== "string" || !value.startsWith("data:")) return value;
+  const assetRef = ref(storage, `users/${uid}/${path}`);
+  await uploadString(assetRef, value, "data_url");
+  return getDownloadURL(assetRef);
+};
+
+const persistAccountAssets = async (uid, data) => {
+  const next = { ...data };
+  if (next.avatar) {
+    next.avatar = await persistAccountAsset(uid, "avatar", next.avatar);
   }
+  if (next.signature) {
+    next.signature = await persistAccountAsset(uid, "signature", next.signature);
+  }
+  if (Array.isArray(next.documents)) {
+    next.documents = await Promise.all(next.documents.map(async (document) => {
+      const persisted = { ...document };
+      for (const field of [
+        "fileDataUrl",
+        "studentSignature",
+        "supervisorSignature",
+        "inchargeSignature",
+        "hodSignature",
+      ]) {
+        if (persisted[field]) {
+          persisted[field] = await persistAccountAsset(
+            uid,
+            `documents/${document.id}/${field}`,
+            persisted[field]
+          );
+        }
+      }
+      return persisted;
+    }));
+  }
+  return next;
+};
+
+// Store account profile and uploaded assets in Firebase so they follow the user across devices.
+export const saveUserRoleToFirestore = async (uid, email, role, extraData = {}) => {
+  const persistedData = await persistAccountAssets(uid, extraData);
+  await setDoc(doc(db, "users", uid), {
+    uid,
+    email: email.toLowerCase(),
+    role,
+    updatedAt: new Date().toISOString(),
+    ...persistedData,
+  }, { merge: true });
 };
 
 // Fetch user role and details from Firebase Firestore with safety timeout
-export const getUserRoleFromFirestore = async (uid, timeoutMs = 1200) => {
-  try {
-    const userRef = doc(db, "users", uid);
-    const snap = await Promise.race([
-      getDoc(userRef),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Firestore fetch timed out")), timeoutMs)
-      ),
-    ]);
-    if (snap.exists()) {
-      return snap.data();
-    }
-  } catch (err) {
-    console.warn("Firestore fetch user role notice:", err);
+export const getUserRoleFromFirestore = async (uid, timeoutMs = 8000) => {
+  const userRef = doc(db, "users", uid);
+  const snap = await Promise.race([
+    getDoc(userRef),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Firestore fetch timed out")), timeoutMs)
+    ),
+  ]);
+  if (snap.exists()) {
+    return persistAccountAssets(uid, snap.data());
   }
   return null;
 };
@@ -271,10 +318,42 @@ export const getUsersByRoleFromFirestore = async (role) => {
     where("role", "==", role)
   );
   const snapshot = await getDocs(usersQuery);
-  return snapshot.docs.map((userDoc) => ({
-    ...userDoc.data(),
+  return Promise.all(snapshot.docs.map(async (userDoc) => ({
+    ...await persistAccountAssets(userDoc.id, userDoc.data()),
     firebaseUid: userDoc.id,
-  }));
+  })));
+};
+
+export const getTemplatesFromFirestore = async (campusId) => {
+  const templatesQuery = query(
+    collection(db, "templates"),
+    where("campusId", "==", campusId)
+  );
+  const snapshot = await getDocs(templatesQuery);
+  return Promise.all(snapshot.docs.map(async (templateDoc) => ({
+    ...templateDoc.data(),
+    id: templateDoc.id,
+  })));
+};
+
+export const saveTemplateToFirestore = async (template) => {
+  const data = { ...template };
+  if (typeof data.fileDataUrl === "string" && data.fileDataUrl.startsWith("data:")) {
+    const fileRef = ref(storage, `campuses/${data.campusId}/templates/${data.id}/file`);
+    await uploadString(fileRef, data.fileDataUrl, "data_url");
+    data.fileDataUrl = await getDownloadURL(fileRef);
+  }
+  await setDoc(doc(db, "templates", data.id), data);
+};
+
+export const deleteTemplateFromFirestore = async (template) => {
+  if (template?.campusId && template?.id) {
+    const fileRef = ref(storage, `campuses/${template.campusId}/templates/${template.id}/file`);
+    await deleteObject(fileRef).catch((err) => {
+      if (err.code !== "storage/object-not-found") throw err;
+    });
+    await deleteDoc(doc(db, "templates", template.id));
+  }
 };
 
 export const formatFirebaseError = (error) => {

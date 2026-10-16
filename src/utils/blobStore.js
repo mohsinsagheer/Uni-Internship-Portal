@@ -84,8 +84,9 @@ export async function persistStudents(students) {
   return Promise.all((students || []).map(async (student) => {
     const avatarId = await persistAvatar(student);
     const documents = await Promise.all((student.documents || []).map(persistDoc));
+    const { password: _password, ...safeStudent } = student;
     return {
-      ...student,
+      ...safeStudent,
       avatar: isHeavy(student.avatar) ? undefined : student.avatar,
       avatarId,
       documents,
@@ -100,26 +101,13 @@ export async function persistUsers(users) {
       ? (user.signatureId || `signature:${user.id}`)
       : user.signatureId;
     if (isHeavy(user.signature)) await blobSet(signatureId, user.signature);
+    const { password: _password, ...safeUser } = user;
     return {
-      ...user,
+      ...safeUser,
       avatar: isHeavy(user.avatar) ? undefined : user.avatar,
       signature: isHeavy(user.signature) ? undefined : user.signature,
       avatarId,
       signatureId,
-    };
-  }));
-}
-
-export async function persistTemplates(templates) {
-  return Promise.all((templates || []).map(async (tpl) => {
-    const fileBlobId = isHeavy(tpl.fileDataUrl)
-      ? (tpl.fileBlobId || `tplfile:${tpl.id}`)
-      : tpl.fileBlobId;
-    if (isHeavy(tpl.fileDataUrl)) await blobSet(fileBlobId, tpl.fileDataUrl);
-    return {
-      ...tpl,
-      fileDataUrl: undefined,
-      fileBlobId,
     };
   }));
 }
@@ -146,20 +134,9 @@ export async function hydrateUsers(users) {
   })));
 }
 
-export async function hydrateTemplates(templates) {
-  return Promise.all((templates || []).map(async (tpl) => ({
-    ...tpl,
-    fileDataUrl: (await blobGet(tpl.fileBlobId)) || tpl.fileDataUrl || null,
-  })));
-}
-
 export async function deleteDocumentBlobs(doc) {
   if (!doc) return;
   for (const [, idField] of DOC_FIELDS) {
     await blobDel(doc[idField]);
   }
-}
-
-export async function deleteTemplateBlobs(tpl) {
-  if (tpl?.fileBlobId) await blobDel(tpl.fileBlobId);
 }

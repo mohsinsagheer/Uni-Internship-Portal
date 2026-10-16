@@ -143,6 +143,15 @@ export default function App() {
   const closeAuth = useCallback(() => setAuthModalOpen(false), []);
   const goBack = useCallback(() => setActiveTab('dashboard'), []);
 
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-[#f1f5f9]">
+        <Toast toastMessage={toastMessage} />
+        <AuthModal isOpen onClose={() => {}} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[#f1f5f9] text-slate-800">
       <Toast toastMessage={toastMessage} />

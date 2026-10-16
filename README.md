@@ -1,16 +1,21 @@
-# React + Vite
+# COMSATS Internship Portal
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+## Run locally
 
-Currently, two official plugins are available:
+```sh
+npm install
+npm run dev
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Firebase requirements
 
-## React Compiler
+Portal access requires a verified Firebase Authentication session. User accounts, profiles, academic and placement details, student submissions and signatures, and campus templates are read from and saved to Firebase so they can be loaded on another device after sign-in. Image and document files are stored in Firebase Storage; their metadata is stored in Cloud Firestore.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Configure the Firebase project used in `src/firebase.js` with:
 
-## Expanding the Oxlint configuration
+- Email/password authentication and email verification enabled.
+- A Cloud Firestore database with the `users` and `templates` collections available.
+- Firebase Storage enabled for profile photos, signatures, uploaded documents, and templates.
+- Firestore and Storage security rules that enforce signed-in access, same-campus role access for staff workflows, and prevent users from changing their own role or campus.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+The application reports Firebase read/write and upload failures to the user. It does not treat local browser storage as the source of truth for account data.
