@@ -235,6 +235,8 @@ export const PortalProvider = ({ children }) => {
   const latestInchargeUsers = useRef([]);
   const latestHodUsers = useRef([]);
   const latestCurrentUser = useRef(null);
+  const explicitLoginInProgress = useRef(false);
+  const explicitlyHandledAuthUid = useRef(null);
 
   const [submissionFilter, setSubmissionFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -320,7 +322,11 @@ export const PortalProvider = ({ children }) => {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (fbUser) => {
       // If a currentUser is already set (login() already handled it), do nothing
-      if (latestCurrentUser.current) return;
+      if (
+        explicitLoginInProgress.current
+        || (fbUser && fbUser.uid === explicitlyHandledAuthUid.current)
+        || latestCurrentUser.current
+      ) return;
 
       if (fbUser && fbUser.email) {
         // Enforce email verification on auth state restoration
@@ -642,14 +648,17 @@ export const PortalProvider = ({ children }) => {
     }
 
     let fbUser;
+    explicitLoginInProgress.current = true;
     try {
       const credential = await firebaseLogin(cleanEmail, password);
       fbUser = credential.user;
+      explicitlyHandledAuthUid.current = fbUser.uid;
     } catch (err) {
+      explicitLoginInProgress.current = false;
       return { success: false, error: formatFirebaseError(err) };
     }
+    explicitLoginInProgress.current = false;
 
-    await fbUser.reload();
     if (!fbUser.emailVerified) {
       await firebaseLogout();
       return {
