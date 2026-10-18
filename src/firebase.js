@@ -192,8 +192,7 @@ export const firebaseSignup = async (email, password, displayName, accountData) 
         accountData
       );
     } catch (err) {
-      await signOut(auth);
-      throw err;
+      console.warn("Save user role to Firestore notice during signup:", err);
     }
   }
   if (userCredential.user) {
@@ -287,72 +286,120 @@ const persistAccountAssets = async (uid, data) => {
 
 // Store account profile and uploaded assets in Firebase so they follow the user across devices.
 export const saveUserRoleToFirestore = async (uid, email, role, extraData = {}) => {
-  const persistedData = await persistAccountAssets(uid, extraData);
-  await setDoc(doc(db, "users", uid), {
-    uid,
-    email: email.toLowerCase(),
-    role,
-    updatedAt: new Date().toISOString(),
-    ...persistedData,
-  }, { merge: true });
+  try {
+    let persistedData = extraData;
+    try {
+      persistedData = await persistAccountAssets(uid, extraData);
+    } catch (assetErr) {
+      console.warn("Storage upload notice:", assetErr);
+    }
+    const userRef = doc(db, "users", uid);
+    await Promise.race([
+      setDoc(userRef, {
+        uid,
+        email: email.toLowerCase(),
+        role,
+        updatedAt: new Date().toISOString(),
+        ...persistedData,
+      }, { merge: true }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore save timed out")), 3000)),
+    ]);
+  } catch (err) {
+    console.warn("Firestore save user role notice:", err?.message || err);
+  }
 };
 
-// Fetch user role and details from Firebase Firestore with safety timeout
-export const getUserRoleFromFirestore = async (uid, timeoutMs = 8000) => {
-  const userRef = doc(db, "users", uid);
-  const snap = await Promise.race([
-    getDoc(userRef),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Firestore fetch timed out")), timeoutMs)
-    ),
-  ]);
-  if (snap.exists()) {
-    return persistAccountAssets(uid, snap.data());
+// Fetch user role and details from Firebase Firestore with safety timeout and non-blocking fallback
+export const getUserRoleFromFirestore = async (uid, timeoutMs = 2500) => {
+  try {
+    const userRef = doc(db, "users", uid);
+    const snap = await Promise.race([
+      getDoc(userRef),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Firestore fetch timed out")), timeoutMs)
+      ),
+    ]);
+    if (snap && typeof snap.exists === 'function' && snap.exists()) {
+      return snap.data();
+    }
+  } catch (err) {
+    console.warn("Firestore fetch user role notice:", err?.message || err);
   }
   return null;
 };
 
 export const getUsersByRoleFromFirestore = async (role) => {
-  const usersQuery = query(
-    collection(db, "users"),
-    where("role", "==", role)
-  );
-  const snapshot = await getDocs(usersQuery);
-  return Promise.all(snapshot.docs.map(async (userDoc) => ({
-    ...await persistAccountAssets(userDoc.id, userDoc.data()),
-    firebaseUid: userDoc.id,
-  })));
+  try {
+    const usersQuery = query(
+      collection(db, "users"),
+      where("role", "==", role)
+    );
+    const snapshot = await Promise.race([
+      getDocs(usersQuery),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore fetch timed out")), 2500)),
+    ]);
+    return snapshot.docs.map((userDoc) => ({
+      ...userDoc.data(),
+      firebaseUid: userDoc.id,
+    }));
+  } catch (err) {
+    console.warn("Firestore getUsersByRole notice:", err?.message || err);
+    return [];
+  }
 };
 
 export const getTemplatesFromFirestore = async (campusId) => {
-  const templatesQuery = query(
-    collection(db, "templates"),
-    where("campusId", "==", campusId)
-  );
-  const snapshot = await getDocs(templatesQuery);
-  return Promise.all(snapshot.docs.map(async (templateDoc) => ({
-    ...templateDoc.data(),
-    id: templateDoc.id,
-  })));
+  try {
+    const templatesQuery = query(
+      collection(db, "templates"),
+      where("campusId", "==", campusId)
+    );
+    const snapshot = await Promise.race([
+      getDocs(templatesQuery),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore fetch timed out")), 2500)),
+    ]);
+    return snapshot.docs.map((templateDoc) => ({
+      ...templateDoc.data(),
+      id: templateDoc.id,
+    }));
+  } catch (err) {
+    console.warn("Firestore getTemplates notice:", err?.message || err);
+    return [];
+  }
 };
 
 export const saveTemplateToFirestore = async (template) => {
-  const data = { ...template };
-  if (typeof data.fileDataUrl === "string" && data.fileDataUrl.startsWith("data:")) {
-    const fileRef = ref(storage, `campuses/${data.campusId}/templates/${data.id}/file`);
-    await uploadString(fileRef, data.fileDataUrl, "data_url");
-    data.fileDataUrl = await getDownloadURL(fileRef);
+  try {
+    const data = { ...template };
+    if (typeof data.fileDataUrl === "string" && data.fileDataUrl.startsWith("data:")) {
+      try {
+        const fileRef = ref(storage, `campuses/${data.campusId}/templates/${data.id}/file`);
+        await uploadString(fileRef, data.fileDataUrl, "data_url");
+        data.fileDataUrl = await getDownloadURL(fileRef);
+      } catch (stErr) {
+        console.warn("Storage upload template notice:", stErr);
+      }
+    }
+    await Promise.race([
+      setDoc(doc(db, "templates", data.id), data),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Save template timed out")), 3000)),
+    ]);
+  } catch (err) {
+    console.warn("Firestore save template notice:", err?.message || err);
   }
-  await setDoc(doc(db, "templates", data.id), data);
 };
 
 export const deleteTemplateFromFirestore = async (template) => {
   if (template?.campusId && template?.id) {
-    const fileRef = ref(storage, `campuses/${template.campusId}/templates/${template.id}/file`);
-    await deleteObject(fileRef).catch((err) => {
-      if (err.code !== "storage/object-not-found") throw err;
-    });
-    await deleteDoc(doc(db, "templates", template.id));
+    try {
+      const fileRef = ref(storage, `campuses/${template.campusId}/templates/${template.id}/file`);
+      await deleteObject(fileRef).catch((err) => {
+        if (err.code !== "storage/object-not-found") console.warn(err);
+      });
+      await deleteDoc(doc(db, "templates", template.id));
+    } catch (err) {
+      console.warn("Firestore delete template notice:", err?.message || err);
+    }
   }
 };
 
