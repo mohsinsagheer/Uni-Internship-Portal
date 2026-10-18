@@ -143,7 +143,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
       <div className="absolute inset-0 pointer-events-none"
         style={{ opacity: 0.04, backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 39px,#fff 39px,#fff 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,#fff 39px,#fff 40px)' }} />
 
-      <div className="relative z-10 p-8 sm:p-10">
+      <div className="relative z-10 p-4 sm:p-8 lg:p-10">
         {/* Top ribbon */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
           <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest px-4 py-1.5 rounded-full"
@@ -174,7 +174,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row items-start gap-8">
+        <div className="flex flex-col md:flex-row items-start gap-4 sm:gap-8">
           {/* Avatar */}
           <div className="relative shrink-0">
             <div className="w-32 h-32 rounded-3xl p-[3px] shadow-2xl"
@@ -245,7 +245,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
             ) : (
               <div className="space-y-5">
                 <div>
-                  <h2 className="text-3xl sm:text-4xl font-black text-white leading-tight tracking-tight">
+                  <h2 className="text-2xl sm:text-4xl font-black text-white leading-tight tracking-tight">
                     {savedProfile.name || currentUser?.name || 'NULL'}
                   </h2>
                   <p className="mt-1.5 text-base font-semibold" style={{ color: 'rgba(232,201,106,0.90)' }}>
@@ -304,7 +304,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
 
   // ── KPI Cards ──
   const KpiCards = () => (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 min-[390px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {[
         { label: 'Assigned Students', value: totalAssigned, sub: 'Under my supervision', bg: 'bg-white', border: 'border-slate-200', val: 'text-slate-900', icon: <Users className="w-5 h-5 text-slate-500" />, iconBg: 'bg-slate-100', filterId: 'all' },
         { label: 'Pending Submissions', value: pendingSubmissionCount, sub: 'Require student action', bg: 'bg-amber-50', border: 'border-amber-200', val: 'text-amber-800', icon: <AlertCircle className="w-5 h-5 text-amber-600" />, iconBg: 'bg-amber-100', filterId: 'pending_submission' },
@@ -337,16 +337,16 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
   const SectionBanner = ({ icon, label, title, desc }) => (
     <div className="relative rounded-2xl overflow-hidden shadow-xl"
       style={{ background: 'linear-gradient(135deg, #00132a 0%, #082e5b 60%, #0a3a70 100%)' }}>
-      <div className="relative z-10 p-6 sm:p-8 flex items-center gap-5">
-        <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
+      <div className="relative z-10 p-4 sm:p-6 lg:p-8 flex items-start sm:items-center gap-3 sm:gap-5">
+        <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
           style={{ background: 'linear-gradient(135deg,#c29b38,#e8c96a)' }}>
-          {icon}
+          <span className="scale-75 sm:scale-100">{icon}</span>
         </div>
-        <div>
+        <div className="min-w-0">
           <span className="inline-block text-[11px] font-bold uppercase tracking-widest px-3 py-0.5 rounded-full mb-1"
             style={{ background: 'rgba(194,155,56,0.18)', color: '#e8c96a', border: '1px solid rgba(194,155,56,0.3)' }}>{label}</span>
-          <h2 className="text-xl font-extrabold text-white">{title}</h2>
-          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.60)' }}>{desc}</p>
+          <h2 className="text-lg sm:text-xl font-extrabold text-white leading-tight">{title}</h2>
+          <p className="text-xs sm:text-sm mt-1" style={{ color: 'rgba(255,255,255,0.60)' }}>{desc}</p>
         </div>
       </div>
     </div>

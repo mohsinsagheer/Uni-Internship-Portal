@@ -17,7 +17,15 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
+    min-width: 320px;
     overscroll-behavior-x: none;
+  }
+
+  img,
+  video,
+  canvas,
+  iframe {
+    max-width: 100%;
   }
 }
 
@@ -27,6 +35,12 @@ input,
 select,
 textarea {
   -webkit-tap-highlight-color: transparent;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
 }
 
 button,

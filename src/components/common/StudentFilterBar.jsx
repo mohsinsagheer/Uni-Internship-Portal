@@ -80,7 +80,7 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
   const hasActiveFilters = submissionFilter !== 'all' || searchQuery !== '' || selectedSupervisorFilter !== 'all';
 
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-3.5 shadow-sis-card space-y-3">
+    <div className="bg-white rounded-lg border border-slate-200 p-3 sm:p-3.5 shadow-sis-card space-y-3">
       {/* Top Search & Filter Bar Controls */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         {/* Search Input */}
@@ -148,7 +148,7 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
           <span>Filter by Submission &amp; Clearance Status:</span>
         </div>
 
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter students by submission and clearance status">
+        <div className="flex flex-nowrap sm:flex-wrap gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x" role="group" aria-label="Filter students by submission and clearance status">
           {filterOptions.map((opt) => {
             const Icon = opt.icon;
             const isSelected = submissionFilter === opt.id;
@@ -157,7 +157,7 @@ export default function StudentFilterBar({ showSupervisorSelect = true }) {
                 key={opt.id}
                 onClick={() => setSubmissionFilter(opt.id)}
                 aria-pressed={isSelected}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${isSelected ? opt.activeColor : opt.color}`}
+                className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded text-xs font-semibold border transition-colors snap-start ${isSelected ? opt.activeColor : opt.color}`}
               >
                 <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                 <span>{opt.label}</span>

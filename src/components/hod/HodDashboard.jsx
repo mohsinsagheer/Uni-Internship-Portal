@@ -150,7 +150,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
             }}
           />
 
-          <div className="relative z-10 p-8 sm:p-10">
+          <div className="relative z-10 p-4 sm:p-8 lg:p-10">
             {/* Top ribbon */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
               <span
@@ -192,7 +192,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
             </div>
 
             {/* Main profile row */}
-            <div className="flex flex-col md:flex-row items-start gap-8">
+            <div className="flex flex-col md:flex-row items-start gap-4 sm:gap-8">
 
               {/* ── Avatar ── */}
               <div className="relative shrink-0">
@@ -292,7 +292,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                   <div className="space-y-5">
                     {/* Name + title */}
                     <div>
-                      <h2 className="text-3xl sm:text-4xl font-black text-white leading-tight tracking-tight">
+                      <h2 className="text-2xl sm:text-4xl font-black text-white leading-tight tracking-tight">
                         {savedProfile.name || currentUser?.name || 'NULL'}
                       </h2>
                       <p className="mt-1.5 text-base font-semibold" style={{ color: 'rgba(232,201,106,0.90)' }}>
@@ -376,7 +376,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
         </div>
 
         {/* ─── KPI CARDS ─── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 min-[390px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {[
             {
               label: 'Total Enrolled',
@@ -454,22 +454,22 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
           className="relative rounded-2xl overflow-hidden shadow-xl"
           style={{ background: 'linear-gradient(135deg, #00132a 0%, #002147 40%, #002b5c 70%, #082e5b 100%)' }}
         >
-          <div className="relative z-10 p-6 sm:p-8 flex items-center gap-5">
+          <div className="relative z-10 p-4 sm:p-6 lg:p-8 flex items-start sm:items-center gap-3 sm:gap-5">
             <div
-              className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
+              className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
               style={{ background: 'linear-gradient(135deg,#c29b38,#e8c96a)' }}
             >
-              <BarChart3 className="w-7 h-7 text-white" />
+              <BarChart3 className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
             </div>
-            <div>
+            <div className="min-w-0">
               <span
                 className="inline-block text-[11px] font-bold uppercase tracking-widest px-3 py-0.5 rounded-full mb-1"
                 style={{ background: 'rgba(194,155,56,0.18)', color: '#e8c96a', border: '1px solid rgba(194,155,56,0.3)' }}
               >
                 HOD Analysis View
               </span>
-              <h2 className="text-xl font-extrabold text-white">Faculty Supervision Distribution</h2>
-              <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.60)' }}>
+              <h2 className="text-lg sm:text-xl font-extrabold text-white leading-tight">Faculty Supervision Distribution</h2>
+              <p className="text-xs sm:text-sm mt-1" style={{ color: 'rgba(255,255,255,0.60)' }}>
                 Departmental workload overview &nbsp;·&nbsp; Session Fall 2026
               </p>
             </div>
@@ -580,7 +580,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
           className="relative rounded-2xl overflow-hidden shadow-xl"
           style={{ background: 'linear-gradient(135deg, #00132a 0%, #002147 40%, #002b5c 70%, #082e5b 100%)' }}
         >
-          <div className="relative z-10 p-6 sm:p-8 flex items-center gap-5">
+          <div className="relative z-10 p-4 sm:p-6 lg:p-8 flex items-start sm:items-center gap-3 sm:gap-5">
             <div
               className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
               style={{ background: 'linear-gradient(135deg,#c29b38,#e8c96a)' }}
@@ -747,7 +747,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
       <div className="space-y-6 fade-in">
         <div className="relative rounded-2xl overflow-hidden shadow-xl"
           style={{ background: 'linear-gradient(135deg, #00132a 0%, #002147 40%, #002b5c 70%, #082e5b 100%)' }}>
-          <div className="relative z-10 p-6 sm:p-8 flex items-center gap-5">
+          <div className="relative z-10 p-4 sm:p-6 lg:p-8 flex items-start sm:items-center gap-3 sm:gap-5">
             <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg bg-emerald-600">
               <CheckCircle2 className="w-7 h-7 text-white" />
             </div>
@@ -805,7 +805,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
               })}
             </div>
           ) : (
-            <div className="p-10 text-center text-xs text-slate-400">No fully endorsed students yet.</div>
+            <div className="p-6 sm:p-10 text-center text-xs text-slate-400">No fully endorsed students yet.</div>
           )}
         </div>
       </div>

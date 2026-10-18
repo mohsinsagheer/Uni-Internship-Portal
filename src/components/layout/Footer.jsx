@@ -4,11 +4,11 @@ import { BookOpen } from 'lucide-react';
 export default memo(function Footer({ onOpenDirectives }) {
   return (
     <footer className="mt-16 bg-gradient-to-r from-[#001530] via-[#002147] to-[#082a52] text-slate-200 border-t-2 border-[#c29b38]/40 shadow-[0_-8px_32px_0_rgba(0,15,40,0.4)]">
-      <div className="w-full px-4 sm:px-8 lg:px-12 py-8">
-        <div className="flex flex-col lg:flex-row items-center lg:items-start justify-between gap-6">
+      <div className="w-full px-3 sm:px-8 lg:px-12 py-6 sm:py-8">
+        <div className="flex flex-col lg:flex-row items-center lg:items-start justify-between gap-5 sm:gap-6">
 
           {/* Left: University Identity & Official Seal */}
-          <div className="flex items-center gap-3 sm:gap-4 max-w-full text-center sm:text-left">
+          <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 max-w-full text-center sm:text-left">
             <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 lg:w-32 lg:h-32 rounded-full bg-white p-1 flex items-center justify-center shadow-xl border-2 border-[#c29b38] shrink-0">
               <img
                 src="/cui-logo.png"
@@ -20,11 +20,11 @@ export default memo(function Footer({ onOpenDirectives }) {
                 className="w-full h-full object-contain rounded-full"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="font-serif font-black text-sm sm:text-lg md:text-xl text-white tracking-wide uppercase leading-tight">
                 COMSATS University Islamabad
               </p>
-              <p className="text-xs sm:text-sm text-[#facc15] mt-0.5 tracking-wide">
+              <p className="text-xs sm:text-sm text-[#facc15] mt-0.5 tracking-wide leading-snug">
                 Internship &amp; Corporate Placement Information Portal
               </p>
               <p className="text-[11px] text-slate-400 mt-1">
@@ -75,7 +75,7 @@ export default memo(function Footer({ onOpenDirectives }) {
         </div>
 
         {/* Bottom Copyright Bar */}
-        <div className="mt-6 pt-4 border-t border-white/10 text-xs text-slate-400 text-center">
+        <div className="mt-5 sm:mt-6 pt-4 border-t border-white/10 text-[10px] sm:text-xs text-slate-400 text-center leading-relaxed">
           <p>© 2026 COMSATS University Islamabad. All Rights Reserved. Official Portal for Student Dossier &amp; Digital Clearance.</p>
         </div>
       </div>

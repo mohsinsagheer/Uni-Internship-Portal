@@ -247,14 +247,14 @@ export default function SignatureModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-300 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-300 w-full max-w-xl max-h-[96dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="bg-cui-navy text-white px-5 py-3.5 flex items-center justify-between border-b border-cui-gold">
-          <div className="flex items-center gap-2.5">
+        <div className="bg-cui-navy text-white px-3 sm:px-5 py-3 sm:py-3.5 flex items-center justify-between gap-2 border-b border-cui-gold">
+          <div className="flex items-center gap-2.5 min-w-0">
             <FileSignature className="w-5 h-5 text-cui-gold" />
             <div>
-              <h3 className="font-bold text-sm leading-tight text-white">
+              <h3 className="font-bold text-xs sm:text-sm leading-tight text-white">
                 {getRoleTitle()}
               </h3>
               <p className="text-[11px] text-slate-300">
@@ -270,11 +270,11 @@ export default function SignatureModal({
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-3 sm:p-5 space-y-4">
           {/* Target Student Info Strip */}
           {targetStudent && (
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center justify-between text-xs">
-              <div>
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs">
+              <div className="min-w-0 break-words">
                 <span className="text-slate-500 font-medium">Student: </span>
                 <span className="font-bold text-cui-navy">{targetStudent.name}</span>
                 <span className="font-mono text-slate-600 ml-1.5 font-medium">({targetStudent.regNo})</span>

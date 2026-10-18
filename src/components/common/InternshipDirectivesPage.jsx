@@ -74,7 +74,7 @@ export default function InternshipDirectivesPage({ onBack }) {
   return (
     <div className="space-y-6 w-full animate-fade-in">
       {/* ── Top University Header Banner ── */}
-      <div className="relative rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-r from-[#00132a] via-[#002147] to-[#082e5b] text-white p-6 sm:p-10 border-2 border-[#c29b38]/50">
+      <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-r from-[#00132a] via-[#002147] to-[#082e5b] text-white p-4 sm:p-8 lg:p-10 border-2 border-[#c29b38]/50">
         <div className="absolute top-0 right-0 w-96 h-96 rounded-full bg-[#c29b38]/10 blur-3xl pointer-events-none"></div>
         <div className="relative z-10">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/15">
@@ -166,7 +166,7 @@ export default function InternshipDirectivesPage({ onBack }) {
       </div>
 
       {/* ── Official Clearance Checklist ── */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl p-6 sm:p-8 space-y-5">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl p-4 sm:p-6 lg:p-8 space-y-5">
         <div className="flex items-center gap-3 pb-4 border-b border-slate-200">
           <div className="w-10 h-10 rounded-xl bg-[#c29b38]/20 border border-[#c29b38]/40 flex items-center justify-center text-[#002147]">
             <Award className="w-5 h-5 text-[#c29b38]" />
@@ -220,7 +220,7 @@ export default function InternshipDirectivesPage({ onBack }) {
       </div>
 
       {/* ── Official Contact & Student Service Centre Helpdesk ── */}
-      <div className="bg-gradient-to-r from-[#001530] to-[#002b5c] rounded-2xl text-white p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 border-2 border-[#c29b38]/40 shadow-xl">
+      <div className="bg-gradient-to-r from-[#001530] to-[#002b5c] rounded-2xl text-white p-4 sm:p-6 lg:p-8 flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-6 border-2 border-[#c29b38]/40 shadow-xl">
         <div className="flex items-center gap-4 text-center md:text-left">
           <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-[#facc15] shrink-0">
             <PhoneCall className="w-7 h-7" />

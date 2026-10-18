@@ -303,13 +303,13 @@ export default function StudentDashboard({
           {/* ── WIDE & PROFESSIONAL STUDENT PROFILE CARD ── */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
             {/* Top Navy/Gold Banner Header */}
-            <div className="px-6 py-4 bg-gradient-to-r from-[#001530] via-[#002147] to-[#0b3569] border-b-2 border-[#c29b38] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-[#001530] via-[#002147] to-[#0b3569] border-b-2 border-[#c29b38] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
                   <GraduationCap className="w-5 h-5 text-[#c29b38]" />
                 </div>
                 <div>
-                  <h2 className="font-serif font-black text-white text-base sm:text-lg tracking-wide uppercase">
+                  <h2 className="font-serif font-black text-white text-sm sm:text-lg tracking-wide uppercase leading-tight">
                     Official Student Internship Dossier
                   </h2>
                   <p className="text-xs text-slate-300">
@@ -348,10 +348,10 @@ export default function StudentDashboard({
             </div>
 
             {/* Profile Body: Photo + Primary Info + Metrics Grid */}
-            <div className="p-6 sm:p-8">
+            <div className="p-4 sm:p-6 lg:p-8">
               <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 pb-6 border-b border-slate-100">
                 {/* Student Identity Left Block */}
-                <div className="flex items-start sm:items-center gap-5">
+                <div className="flex items-start sm:items-center gap-3 sm:gap-5 min-w-0 w-full">
                   <div className="relative shrink-0 group">
                     <input
                       type="file"
@@ -388,9 +388,9 @@ export default function StudentDashboard({
                     </button>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 min-w-0">
                     <div className="flex items-center gap-2.5 flex-wrap">
-                      <h3 className="font-serif font-black text-2xl sm:text-3xl text-[#002147] leading-tight">
+                      <h3 className="font-serif font-black text-xl sm:text-3xl text-[#002147] leading-tight break-words">
                         {currentUser?.name}
                       </h3>
                     </div>
@@ -512,7 +512,7 @@ export default function StudentDashboard({
               </div>
 
               {/* Academic & Internship Progress Highlights Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+              <div className="grid grid-cols-1 min-[390px]:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-5 sm:mt-6">
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                   <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                     Semester
@@ -839,7 +839,7 @@ export default function StudentDashboard({
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
-            <div className="px-6 py-4 bg-gradient-to-r from-[#001530] via-[#002147] to-[#0b3569] border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-white">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-[#001530] via-[#002147] to-[#0b3569] border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-white">
               <div>
                 <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2">
                   <FileText className="w-4.5 h-4.5 text-[#c29b38]" />
@@ -975,7 +975,7 @@ export default function StudentDashboard({
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full min-w-[620px] text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-100/90 text-[#002147] border-b border-slate-200 font-bold uppercase tracking-wider text-[11px]">
                       <th className="py-3 px-5">Form Code</th>
@@ -1075,7 +1075,7 @@ export default function StudentDashboard({
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
-            <div className="px-6 py-4 bg-gradient-to-r from-[#001530] via-[#002147] to-[#0b3569] border-b border-slate-200 flex items-center justify-between text-white">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-[#001530] via-[#002147] to-[#0b3569] border-b border-slate-200 flex items-start sm:items-center justify-between gap-3 text-white">
               <div>
                 <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2">
                   <FileCheck2 className="w-4.5 h-4.5 text-emerald-400" />
@@ -1139,7 +1139,7 @@ export default function StudentDashboard({
                     </div>
 
                     {/* 4-Tier Signature Pipeline Status Indicators */}
-                    <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 min-[390px]:grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                       {/* Student Signature */}
                       <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
                         <span className="text-[10px] font-bold text-slate-500 uppercase">1. Student</span>
@@ -1201,7 +1201,7 @@ export default function StudentDashboard({
                 ))}
               </div>
             ) : (
-              <div className="p-10 text-center bg-white">
+              <div className="p-6 sm:p-10 text-center bg-white">
                 <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3 opacity-80" />
                 <h4 className="font-bold text-slate-800 text-base">No Documents Submitted Yet</h4>
                 <p className="text-xs text-slate-500 mt-1.5 max-w-md mx-auto">

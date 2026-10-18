@@ -233,16 +233,16 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
   const SectionBanner = ({ icon, label, title, desc }) => (
     <div className="relative rounded-2xl overflow-hidden shadow-xl border border-[#c29b38]/40"
       style={{ background: 'linear-gradient(135deg, #00132a 0%, #002147 40%, #002b5c 70%, #082e5b 100%)' }}>
-      <div className="relative z-10 p-6 sm:p-8 flex items-center gap-5">
-        <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
+      <div className="relative z-10 p-4 sm:p-6 lg:p-8 flex items-start sm:items-center gap-3 sm:gap-5">
+        <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
           style={{ background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)', border: '1px solid rgba(194,155,56,0.4)' }}>
-          {icon}
+          <span className="scale-75 sm:scale-100">{icon}</span>
         </div>
-        <div>
+        <div className="min-w-0">
           <span className="inline-block text-[11px] font-bold uppercase tracking-widest px-3 py-0.5 rounded-full mb-1"
             style={{ background: 'rgba(255,255,255,0.12)', color: '#facc15', border: '1px solid rgba(194,155,56,0.4)' }}>{label}</span>
-          <h2 className="text-xl font-extrabold text-white">{title}</h2>
-          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.72)' }}>{desc}</p>
+          <h2 className="text-lg sm:text-xl font-extrabold text-white leading-tight">{title}</h2>
+          <p className="text-xs sm:text-sm mt-1" style={{ color: 'rgba(255,255,255,0.72)' }}>{desc}</p>
         </div>
       </div>
     </div>
@@ -250,7 +250,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
 
   // ── KPI Cards ──
   const KpiCards = () => (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+    <div className="grid grid-cols-1 min-[390px]:grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3">
       {[
         { label: 'Total Registered', value: stats.totalStudents, sub: 'All students', bg: 'bg-[#f3f4f6]', border: 'border-[#d1d5db]', val: 'text-[#0f172a]', icon: <Users className="w-4 h-4 text-[#374151]" />, iconBg: 'bg-[#e5e7eb]', filterId: 'all' },
         { label: 'Pending Submissions', value: stats.pendingSubmission, sub: 'Require student action', bg: 'bg-[#fdf2f8]', border: 'border-[#f9a8d4]', val: 'text-[#831843]', icon: <AlertCircle className="w-4 h-4 text-[#be185d]" />, iconBg: 'bg-[#fce7f3]', filterId: 'pending_submission' },
@@ -300,7 +300,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
           <div className="absolute inset-0 pointer-events-none"
             style={{ opacity: 0.04, backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 39px,#fff 39px,#fff 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,#fff 39px,#fff 40px)' }} />
 
-          <div className="relative z-10 p-8 sm:p-10">
+          <div className="relative z-10 p-4 sm:p-8 lg:p-10">
             {/* Top ribbon */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
               <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest px-4 py-1.5 rounded-full"
@@ -332,7 +332,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
               </div>
             </div>
 
-            <div className="flex flex-col md:flex-row items-start gap-8">
+            <div className="flex flex-col md:flex-row items-start gap-4 sm:gap-8">
               {/* Avatar with Gold Ring */}
               <div className="relative shrink-0">
                 <div className="w-32 h-32 rounded-3xl p-[3px] shadow-2xl"
@@ -402,7 +402,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
                 ) : (
                   <div className="space-y-5">
                     <div>
-                      <h2 className="text-3xl sm:text-4xl font-black text-white leading-tight tracking-tight">
+                      <h2 className="text-2xl sm:text-4xl font-black text-white leading-tight tracking-tight">
                         {savedProfile.name || currentUser?.name || 'NULL'}
                       </h2>
                       <p className="mt-1.5 text-base font-semibold" style={{ color: 'rgba(254,243,199,0.90)' }}>
@@ -499,7 +499,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
 
           {allocationStudents.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full min-w-[680px] text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50">
                     <th className="py-3 px-4">Student</th>
@@ -689,7 +689,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
 
           {fullyEndorsedStudents.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full min-w-[680px] text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50">
                     <th className="py-3 px-4">Student</th>
@@ -741,7 +741,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
               </table>
             </div>
           ) : (
-            <div className="p-10 text-center text-xs text-slate-400">No fully endorsed students yet.</div>
+            <div className="p-6 sm:p-10 text-center text-xs text-slate-400">No fully endorsed students yet.</div>
           )}
         </div>
       </div>

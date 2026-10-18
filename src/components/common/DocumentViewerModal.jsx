@@ -221,18 +221,18 @@ export default function DocumentViewerModal({
   };
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm overflow-y-auto ${isStudent ? 'p-0' : 'p-3 sm:p-6'}`}>
-      <div className={`bg-white shadow-2xl border border-slate-300 w-full max-h-[94vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 ${isStudent ? 'max-w-none rounded-none' : 'max-w-4xl rounded-xl'}`}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm overflow-y-auto ${isStudent ? 'p-0' : 'p-2 sm:p-6'}`}>
+      <div className={`bg-white shadow-2xl border border-slate-300 w-full max-h-[96dvh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 ${isStudent ? 'max-w-none rounded-none' : 'max-w-4xl rounded-xl'}`}>
 
         {/* Modal Top Navigation Bar */}
-        <div className="bg-[#001530] text-white px-5 py-3 flex items-center justify-between border-b-2 border-[#c29b38] shrink-0">
-          <div className="flex items-center gap-2.5">
+        <div className="bg-[#001530] text-white px-3 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between gap-2 border-b-2 border-[#c29b38] shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <Award className="w-5 h-5 text-[#c29b38]" />
             <div>
-              <h3 className="font-bold text-sm text-white leading-tight">
+              <h3 className="font-bold text-xs sm:text-sm text-white leading-tight">
                 Submitted Internship Document &amp; Official Endorsements
               </h3>
-              <p className="text-[11px] text-slate-300">
+              <p className="hidden sm:block text-[11px] text-slate-300 truncate">
                 {currentDoc.title} · Ref: <span className="font-mono text-[#facc15]">{currentDoc.id}</span>
               </p>
             </div>
@@ -246,7 +246,7 @@ export default function DocumentViewerModal({
               title="Download Document"
             >
               <Download className="w-3.5 h-3.5 text-[#facc15]" />
-              <span>Download</span>
+              <span className="hidden sm:inline">Download</span>
             </button>
             <button
               type="button"
@@ -259,8 +259,8 @@ export default function DocumentViewerModal({
         </div>
 
         {/* Modal Scrollable Document Container */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100/75">
-          <div className={`${isStudent ? 'max-w-none' : 'max-w-3xl'} mx-auto bg-white border border-slate-300 shadow-md p-6 sm:p-8 text-slate-800 rounded-xl space-y-6`}>
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 sm:p-4 md:p-6 bg-slate-100/75">
+          <div className={`${isStudent ? 'max-w-none' : 'max-w-3xl'} mx-auto bg-white border border-slate-300 shadow-md p-3 sm:p-6 lg:p-8 text-slate-800 rounded-lg sm:rounded-xl space-y-4 sm:space-y-6`}>
 
             {/* 1. OFFICIAL INSTITUTIONAL HEADER & SUBMISSION DOSSIER */}
             <div className="border-b-2 border-[#002147] pb-4">

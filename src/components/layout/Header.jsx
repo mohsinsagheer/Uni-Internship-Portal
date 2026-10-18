@@ -51,14 +51,14 @@ export default memo(function Header({ onOpenAuth }) {
         }`}
     >
       {/* ── FOREGROUND CONTENT ── */}
-      <div className="relative w-full px-4 sm:px-8 lg:px-12">
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 lg:gap-5 py-3 sm:py-4">
+      <div className="relative w-full px-3 sm:px-8 lg:px-12">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2 sm:gap-3 lg:gap-5 py-2.5 sm:py-4">
 
           {/* ── LEFT: Branding ── */}
           <div className="flex items-center gap-2.5 sm:gap-4 lg:gap-5 min-w-0 flex-1">
             {/* University Emblem — LCP image: explicit size prevents CLS, fetchpriority=high */}
             <div
-              className={`shrink-0 rounded-full bg-white p-1 flex items-center justify-center shadow-2xl border-2 sm:border-3 border-[#c29b38] transition-all duration-300 ease-in-out ${scrolled ? 'w-14 h-14 sm:w-16 sm:h-16' : 'w-16 h-16 sm:w-18 sm:h-18 md:w-20 md:h-20 xl:w-24 xl:h-24'
+              className={`shrink-0 rounded-full bg-white p-1 flex items-center justify-center shadow-2xl border-2 sm:border-3 border-[#c29b38] transition-all duration-300 ease-in-out ${scrolled ? 'w-12 h-12 sm:w-16 sm:h-16' : 'w-12 h-12 sm:w-18 sm:h-18 md:w-20 md:h-20 xl:w-24 xl:h-24'
                 }`}
             >
               <img
@@ -83,7 +83,7 @@ export default memo(function Header({ onOpenAuth }) {
               <h1 className="font-serif font-black tracking-wide text-white uppercase leading-tight truncate text-base sm:text-xl md:text-2xl lg:text-[26px]">
                 COMSATS University Islamabad
               </h1>
-              <p className="text-[#facc15] font-semibold tracking-wider uppercase text-[10px] sm:text-xs md:text-sm mt-1">
+              <p className="text-[#facc15] font-semibold tracking-wide sm:tracking-wider uppercase text-[9px] min-[380px]:text-[10px] sm:text-xs md:text-sm mt-1 leading-tight">
                 Internship &amp; Corporate Placement Information Portal
               </p>
             </div>
@@ -95,7 +95,7 @@ export default memo(function Header({ onOpenAuth }) {
 
             {/* Executive Profile Card */}
             {currentUser ? (
-              <div className="flex items-center gap-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/25 shadow-lg transition-colors min-w-0 px-3 py-1.5 sm:px-3.5 sm:py-2">
+              <div className="flex items-center gap-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/25 shadow-lg transition-colors min-w-0 px-2.5 py-1.5 sm:px-3.5 sm:py-2">
                 <div className="flex items-center gap-3">
                   <div className="relative shrink-0">
                     <div className={`rounded-xl overflow-hidden border-2 border-[#c29b38] shadow-md ${scrolled ? 'w-8 h-8' : 'w-10 h-10 sm:w-11 sm:h-11'}`}>

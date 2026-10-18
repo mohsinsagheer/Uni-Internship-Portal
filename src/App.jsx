@@ -163,7 +163,7 @@ export default function App() {
       <NewsTicker />
 
       {/* Main Workspace */}
-      <main className="portal-main flex-1 w-full min-w-0 px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 py-4 sm:py-6">
+      <main className="portal-main flex-1 w-full min-w-0 px-2.5 min-[420px]:px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 py-3 sm:py-6">
         <div className="flex flex-col lg:flex-row gap-6 items-start">
           {/* Left Column: CUOnline User ID & Sidebar Nav (Sticky) */}
           <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />

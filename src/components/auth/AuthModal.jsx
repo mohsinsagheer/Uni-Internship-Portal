@@ -363,13 +363,13 @@ export default function AuthModal({ isOpen, onClose }) {
       aria-modal="true"
       aria-label="CUOnline authentication"
     >
-      <div className="bg-white rounded-[28px] shadow-[0_25px_60px_-15px_rgba(0,25,60,0.55)] border border-slate-200/80 w-full max-w-2xl max-h-[92vh] overflow-y-auto my-3 sm:my-6">
+      <div className="bg-white rounded-2xl sm:rounded-[28px] shadow-[0_25px_60px_-15px_rgba(0,25,60,0.55)] border border-slate-200/80 w-full max-w-2xl max-h-[94dvh] overflow-y-auto my-auto">
 
         {/* ── Top University Branding Header ── */}
-        <div className="bg-gradient-to-r from-[#00132a] via-[#002147] to-[#082e5b] text-white px-5 sm:px-7 py-5 border-b-2 border-[#c29b38]">
+        <div className="bg-gradient-to-r from-[#00132a] via-[#002147] to-[#082e5b] text-white px-4 sm:px-7 py-4 sm:py-5 border-b-2 border-[#c29b38]">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3.5 min-w-0 flex-1">
-              <div className="w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full bg-white p-1.5 flex items-center justify-center border-2 border-[#c29b38] shadow-[0_8px_20px_rgba(194,155,56,0.35)] shrink-0">
+              <div className="w-12 h-12 sm:w-[72px] sm:h-[72px] rounded-full bg-white p-1.5 flex items-center justify-center border-2 border-[#c29b38] shadow-[0_8px_20px_rgba(194,155,56,0.35)] shrink-0">
                 <img src="/cui-logo.png" alt="COMSATS University" className="w-full h-full object-contain rounded-full" />
               </div>
 
@@ -386,7 +386,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <h3 className="font-serif font-black text-base sm:text-xl text-white uppercase tracking-[0.06em] leading-tight">
                   CUOnline Portal
                 </h3>
-                <p className="text-[11px] sm:text-xs text-slate-300 mt-1 leading-relaxed">
+                <p className="hidden min-[380px]:block text-[11px] sm:text-xs text-slate-300 mt-1 leading-relaxed">
                   COMSATS University Islamabad · Academic &amp; Internship Access
                 </p>
               </div>
@@ -409,8 +409,8 @@ export default function AuthModal({ isOpen, onClose }) {
         </div>
 
         {/* ── Executive Tab Pill Bar ── */}
-        <div className="p-4 sm:p-5 pb-0">
-          <div className="p-1.5 bg-slate-100/90 rounded-2xl flex gap-1.5 border border-slate-200 shadow-inner">
+        <div className="p-3 sm:p-5 pb-0">
+          <div className="p-1 bg-slate-100/90 rounded-xl sm:rounded-2xl flex gap-1 border border-slate-200 shadow-inner">
             {currentUser && (
               <button
                 onClick={() => switchTab('account')}
@@ -424,7 +424,7 @@ export default function AuthModal({ isOpen, onClose }) {
             )}
             <button
               onClick={() => switchTab('login')}
-              className={`flex-1 py-3 text-center text-sm sm:text-base font-bold rounded-xl transition-all ${activeTab === 'login'
+              className={`flex-1 py-2.5 sm:py-3 text-center text-xs sm:text-base font-bold rounded-lg sm:rounded-xl transition-all ${activeTab === 'login'
                 ? 'bg-[#002147] text-white shadow-[0_6px_16px_rgba(0,33,71,0.18)]'
                 : 'text-slate-600 hover:text-[#002147]'
                 }`}
@@ -433,7 +433,7 @@ export default function AuthModal({ isOpen, onClose }) {
             </button>
             <button
               onClick={() => switchTab('signup')}
-              className={`flex-1 py-3 text-center text-sm sm:text-base font-bold rounded-xl transition-all ${activeTab === 'signup'
+              className={`flex-1 py-2.5 sm:py-3 text-center text-xs sm:text-base font-bold rounded-lg sm:rounded-xl transition-all ${activeTab === 'signup'
                 ? 'bg-[#002147] text-white shadow-[0_6px_16px_rgba(0,33,71,0.18)]'
                 : 'text-slate-600 hover:text-[#002147]'
                 }`}
@@ -489,7 +489,7 @@ export default function AuthModal({ isOpen, onClose }) {
               <p className="block text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-[0.16em] mb-2" id="role-group-label">
                 Select Your Official Designation
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="group" aria-labelledby="role-group-label">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2" role="group" aria-labelledby="role-group-label">
                 {rolesList.map((r) => {
                   const IconComponent = r.icon;
                   const isSelected = role === r.id;
@@ -499,7 +499,7 @@ export default function AuthModal({ isOpen, onClose }) {
                       type="button"
                       onClick={() => setRole(r.id)}
                       aria-pressed={isSelected}
-                      className={`py-2 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 transition-colors text-[11px] sm:text-xs font-bold ${isSelected
+                      className={`min-h-10 py-2 px-1.5 sm:px-2.5 rounded-xl border flex items-center justify-center gap-1 sm:gap-1.5 transition-colors text-[10px] min-[380px]:text-[11px] sm:text-xs font-bold ${isSelected
                         ? 'bg-[#002147] text-white border-[#c29b38] shadow-md ring-2 ring-[#c29b38]/40'
                         : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                         }`}
