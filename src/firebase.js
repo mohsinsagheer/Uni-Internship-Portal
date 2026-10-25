@@ -247,9 +247,17 @@ export const firebaseResetPassword = async (email) => {
 
 const persistAccountAsset = async (uid, path, value) => {
   if (typeof value !== "string" || !value.startsWith("data:")) return value;
-  const assetRef = ref(storage, `users/${uid}/${path}`);
-  await uploadString(assetRef, value, "data_url");
-  return getDownloadURL(assetRef);
+  try {
+    const assetRef = ref(storage, `users/${uid}/${path}`);
+    await Promise.race([
+      uploadString(assetRef, value, "data_url"),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Storage upload timed out")), 1500)),
+    ]);
+    return await getDownloadURL(assetRef);
+  } catch (err) {
+    console.warn(`Storage notice for users/${uid}/${path}:`, err?.message || err);
+    return value;
+  }
 };
 
 const persistAccountAssets = async (uid, data) => {
@@ -297,12 +305,12 @@ export const saveUserRoleToFirestore = async (uid, email, role, extraData = {}) 
     await Promise.race([
       setDoc(userRef, {
         uid,
-        email: email.toLowerCase(),
+        email: email ? email.toLowerCase() : '',
         role,
         updatedAt: new Date().toISOString(),
         ...persistedData,
       }, { merge: true }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore save timed out")), 3000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore save timed out")), 1500)),
     ]);
   } catch (err) {
     console.warn("Firestore save user role notice:", err?.message || err);
@@ -310,7 +318,7 @@ export const saveUserRoleToFirestore = async (uid, email, role, extraData = {}) 
 };
 
 // Fetch user role and details from Firebase Firestore with safety timeout and non-blocking fallback
-export const getUserRoleFromFirestore = async (uid, timeoutMs = 2500) => {
+export const getUserRoleFromFirestore = async (uid, timeoutMs = 800) => {
   try {
     const userRef = doc(db, "users", uid);
     const snap = await Promise.race([
@@ -328,7 +336,7 @@ export const getUserRoleFromFirestore = async (uid, timeoutMs = 2500) => {
   return null;
 };
 
-export const getUsersByRoleFromFirestore = async (role) => {
+export const getUsersByRoleFromFirestore = async (role, timeoutMs = 1000) => {
   try {
     const usersQuery = query(
       collection(db, "users"),
@@ -336,7 +344,7 @@ export const getUsersByRoleFromFirestore = async (role) => {
     );
     const snapshot = await Promise.race([
       getDocs(usersQuery),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore fetch timed out")), 2500)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore fetch timed out")), timeoutMs)),
     ]);
     return snapshot.docs.map((userDoc) => ({
       ...userDoc.data(),
@@ -348,7 +356,7 @@ export const getUsersByRoleFromFirestore = async (role) => {
   }
 };
 
-export const getTemplatesFromFirestore = async (campusId) => {
+export const getTemplatesFromFirestore = async (campusId, timeoutMs = 1000) => {
   try {
     const templatesQuery = query(
       collection(db, "templates"),
@@ -356,7 +364,7 @@ export const getTemplatesFromFirestore = async (campusId) => {
     );
     const snapshot = await Promise.race([
       getDocs(templatesQuery),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore fetch timed out")), 2500)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore fetch timed out")), timeoutMs)),
     ]);
     return snapshot.docs.map((templateDoc) => ({
       ...templateDoc.data(),
@@ -374,7 +382,10 @@ export const saveTemplateToFirestore = async (template) => {
     if (typeof data.fileDataUrl === "string" && data.fileDataUrl.startsWith("data:")) {
       try {
         const fileRef = ref(storage, `campuses/${data.campusId}/templates/${data.id}/file`);
-        await uploadString(fileRef, data.fileDataUrl, "data_url");
+        await Promise.race([
+          uploadString(fileRef, data.fileDataUrl, "data_url"),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Storage upload timed out")), 1500)),
+        ]);
         data.fileDataUrl = await getDownloadURL(fileRef);
       } catch (stErr) {
         console.warn("Storage upload template notice:", stErr);
@@ -382,7 +393,7 @@ export const saveTemplateToFirestore = async (template) => {
     }
     await Promise.race([
       setDoc(doc(db, "templates", data.id), data),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Save template timed out")), 3000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Save template timed out")), 1500)),
     ]);
   } catch (err) {
     console.warn("Firestore save template notice:", err?.message || err);

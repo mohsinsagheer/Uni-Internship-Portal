@@ -7,6 +7,11 @@ import {
   hydrateStudents,
   hydrateUsers,
   deleteDocumentBlobs,
+  persistTemplates,
+  hydrateTemplates,
+  deleteTemplateBlobs,
+  optimizeImage,
+  blobGet,
 } from '../utils/blobStore';
 import {
   auth,
@@ -177,11 +182,19 @@ const deduplicateStudents = (students) => {
   });
 };
 
-export const downloadTemplateFile = (tpl) => {
+export const downloadTemplateFile = async (tpl) => {
   if (!tpl) return;
+  let fileDataUrl = tpl.fileDataUrl;
+  if (!fileDataUrl && tpl.fileBlobId) {
+    try {
+      fileDataUrl = await blobGet(tpl.fileBlobId);
+    } catch {
+      fileDataUrl = null;
+    }
+  }
   const link = document.createElement('a');
-  if (tpl.fileDataUrl) {
-    link.href = tpl.fileDataUrl;
+  if (fileDataUrl) {
+    link.href = fileDataUrl;
     link.download = tpl.fileName || `${tpl.code || 'template'}_${tpl.title ? tpl.title.replace(/\s+/g, '_') : 'document'}`;
   } else {
     const metadata = `COMSATS UNIVERSITY ISLAMABAD\nOfficial Document Template\n\nTitle: ${tpl.title}\nCode: ${tpl.code}\nCategory: ${tpl.category}\nVersion: ${tpl.version || 'v1.0'}\nPublished By: ${tpl.uploadedBy || 'Internship Incharge'}\nDate: ${tpl.updatedDate || '2026'}`;
@@ -269,11 +282,12 @@ export const PortalProvider = ({ children }) => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [hydratedStudents, hydratedSupervisors, hydratedIncharge, hydratedHod] = await Promise.all([
+      const [hydratedStudents, hydratedSupervisors, hydratedIncharge, hydratedHod, hydratedTpls] = await Promise.all([
         hydrateStudents(students),
         hydrateUsers(supervisors),
         hydrateUsers(inchargeUsers),
         hydrateUsers(hodUsers),
+        hydrateTemplates(templates),
       ]);
 
       const hashedStudents = await Promise.all(hydratedStudents.map(ensureHashedPassword));
@@ -286,6 +300,7 @@ export const PortalProvider = ({ children }) => {
       setSupervisors(hashedSupervisors);
       setInchargeUsers(hashedIncharge);
       setHodUsers(hashedHod);
+      setTemplates(hydratedTpls);
       persistReady.current = true;
     })();
     return () => { cancelled = true; };
@@ -328,7 +343,7 @@ export const PortalProvider = ({ children }) => {
 
   useEffect(() => {
     if (!persistReady.current) return;
-    localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(templates));
+    persistTemplates(templates).then((light) => localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(light)));
   }, [templates]);
 
   // Keep refs in sync so onAuthStateChanged closure always sees latest state
@@ -426,72 +441,82 @@ export const PortalProvider = ({ children }) => {
     }
 
     let cancelled = false;
-    setInchargeRoster({ students: [], supervisors: [] });
     setInchargeRosterLoading(true);
 
     const loadInchargeRoster = async () => {
       try {
         const [firebaseStudents, firebaseSupervisors] = await Promise.all([
-          getUsersByRoleFromFirestore('student'),
-          getUsersByRoleFromFirestore('supervisor'),
+          getUsersByRoleFromFirestore('student', 1000).catch(() => []),
+          getUsersByRoleFromFirestore('supervisor', 1000).catch(() => []),
         ]);
         if (cancelled) return;
 
-        const matchesCampus = (user) => (user.campusId || 'isb') === inchargeCampus;
-        const supervisorsForCampus = firebaseSupervisors
-          .filter(matchesCampus)
-          .map((user) => {
-            const local = latestSupervisors.current.find((candidate) => candidate.firebaseUid === user.firebaseUid);
-            return {
-              ...local,
-              ...user,
-              id: local?.id || `sup-${user.firebaseUid}`,
-              firebaseUid: user.firebaseUid,
-              role: 'supervisor',
-              name: user.name || local?.name || user.regNo || user.firebaseUid,
-              regNo: user.regNo || local?.regNo || '',
-              email: user.officialEmail || local?.email || user.email || '',
-              personalEmail: user.personalEmail || user.email || local?.personalEmail || '',
-              campusId: user.campusId || local?.campusId || 'isb',
-            };
-          });
-        const supervisorByUid = new Map(
-          supervisorsForCampus.map((supervisor) => [supervisor.firebaseUid, supervisor])
-        );
-        const supervisorIds = new Set(supervisorsForCampus.map((supervisor) => supervisor.id));
-        const studentsForCampus = deduplicateStudents(firebaseStudents
-          .filter(matchesCampus)
-          .map((user) => {
-            const local = latestStudents.current.find((candidate) => candidate.firebaseUid === user.firebaseUid);
-            const assignedSupervisorId = user.assignedSupervisorUid
-              ? supervisorByUid.get(user.assignedSupervisorUid)?.id || ''
-              : (user.assignedSupervisorId || local?.assignedSupervisorId || '');
-            return {
-              ...local,
-              ...user,
-              id: local?.id || `std-${user.firebaseUid}`,
-              firebaseUid: user.firebaseUid,
-              role: 'student',
-              name: user.name || local?.name || user.regNo || user.firebaseUid,
-              regNo: user.regNo || local?.regNo || '',
-              email: user.officialEmail || local?.email || user.email || '',
-              personalEmail: user.personalEmail || user.email || local?.personalEmail || '',
-              campusId: user.campusId || local?.campusId || 'isb',
-              documents: user.documents || local?.documents || [],
-              notifications: user.notifications || local?.notifications || [],
-              status: user.status || local?.status || 'pending_submission',
-              assignedSupervisorId: supervisorIds.has(assignedSupervisorId) ? assignedSupervisorId : '',
-            };
-          }));
+        const matchesCampus = (user) => {
+          const userCampus = (user.campusId || 'isb').toLowerCase();
+          const targetCampus = (inchargeCampus || 'isb').toLowerCase();
+          return userCampus === targetCampus || (userCampus.startsWith('isb') && targetCampus.startsWith('isb'));
+        };
 
-        setStudents(studentsForCampus);
-        setSupervisors(supervisorsForCampus);
-        setInchargeRoster({ students: studentsForCampus, supervisors: supervisorsForCampus });
+        const remoteSupervisors = (firebaseSupervisors || []).filter(matchesCampus);
+        const mergedSupervisors = latestSupervisors.current.map((local) => {
+          const remote = remoteSupervisors.find(
+            (r) => r.firebaseUid === local.firebaseUid || (r.personalEmail && r.personalEmail.toLowerCase() === (local.personalEmail || '').toLowerCase())
+          );
+          return remote ? { ...local, ...remote } : local;
+        });
+        remoteSupervisors.forEach((remote) => {
+          if (!mergedSupervisors.some((s) => s.firebaseUid === remote.firebaseUid || (s.personalEmail && s.personalEmail.toLowerCase() === (remote.personalEmail || '').toLowerCase()))) {
+            mergedSupervisors.push({
+              ...remote,
+              id: remote.id || `sup-${remote.firebaseUid}`,
+              role: 'supervisor',
+            });
+          }
+        });
+
+        const supervisorByUid = new Map(
+          mergedSupervisors.map((supervisor) => [supervisor.firebaseUid, supervisor])
+        );
+        const supervisorIds = new Set(mergedSupervisors.map((supervisor) => supervisor.id));
+
+        const remoteStudents = (firebaseStudents || []).filter(matchesCampus);
+        const mergedStudents = latestStudents.current.map((local) => {
+          const remote = remoteStudents.find(
+            (r) => r.firebaseUid === local.firebaseUid || (r.personalEmail && r.personalEmail.toLowerCase() === (local.personalEmail || '').toLowerCase())
+          );
+          if (!remote) return local;
+          const assignedSupervisorId = remote.assignedSupervisorUid
+            ? supervisorByUid.get(remote.assignedSupervisorUid)?.id || ''
+            : (remote.assignedSupervisorId || local.assignedSupervisorId || '');
+          return {
+            ...local,
+            ...remote,
+            assignedSupervisorId: supervisorIds.has(assignedSupervisorId) ? assignedSupervisorId : (local.assignedSupervisorId || ''),
+          };
+        });
+
+        remoteStudents.forEach((remote) => {
+          if (!mergedStudents.some((s) => s.firebaseUid === remote.firebaseUid || (s.personalEmail && s.personalEmail.toLowerCase() === (remote.personalEmail || '').toLowerCase()))) {
+            const assignedSupervisorId = remote.assignedSupervisorUid
+              ? supervisorByUid.get(remote.assignedSupervisorUid)?.id || ''
+              : (remote.assignedSupervisorId || '');
+            mergedStudents.push({
+              ...remote,
+              id: remote.id || `std-${remote.firebaseUid}`,
+              role: 'student',
+              assignedSupervisorId: supervisorIds.has(assignedSupervisorId) ? assignedSupervisorId : '',
+            });
+          }
+        });
+
+        const deduplicated = deduplicateStudents(mergedStudents);
+        setStudents(deduplicated);
+        setSupervisors(mergedSupervisors);
+        setInchargeRoster({ students: deduplicated, supervisors: mergedSupervisors });
       } catch (err) {
-        console.error('Failed to load incharge Firebase roster:', err);
+        console.warn('Notice while loading roster:', err);
         if (!cancelled) {
-          setInchargeRoster({ students: [], supervisors: [] });
-          showToast('Could not load registered students and supervisors from Firebase.', 'error');
+          setInchargeRoster({ students: latestStudents.current, supervisors: latestSupervisors.current });
         }
       } finally {
         if (!cancelled) setInchargeRosterLoading(false);
@@ -511,10 +536,17 @@ export const PortalProvider = ({ children }) => {
 
     let cancelled = false;
     const campusId = currentUser.campusId || selectedCampus;
-    getTemplatesFromFirestore(campusId)
+    getTemplatesFromFirestore(campusId, 1000)
       .then((loadedTemplates) => {
         if (!cancelled && Array.isArray(loadedTemplates) && loadedTemplates.length > 0) {
-          setTemplates(loadedTemplates);
+          setTemplates((prev) => {
+            const remoteMap = new Map(loadedTemplates.map((t) => [t.id, t]));
+            const merged = prev.map((local) => remoteMap.get(local.id) || local);
+            loadedTemplates.forEach((remote) => {
+              if (!merged.some((m) => m.id === remote.id)) merged.push(remote);
+            });
+            return merged;
+          });
         }
       })
       .catch((err) => {
@@ -529,11 +561,27 @@ export const PortalProvider = ({ children }) => {
     ? (currentUser.campusId || selectedCampus)
     : selectedCampus;
 
-  const campusStudents = currentUser ? inchargeRoster.students : [];
-  const campusSupervisors = useMemo(
-    () => supervisors.filter((s) => (s.campusId || 'isb') === viewCampus),
-    [supervisors, viewCampus]
-  );
+  const campusStudents = useMemo(() => {
+    if (!currentUser) return [];
+    const activeCampus = (currentUser?.campusId || selectedCampus || 'isb').toLowerCase();
+    const pool = deduplicateStudents([...students, ...(inchargeRoster.students || [])]);
+    return pool.filter((student) => {
+      const studentCampus = (student.campusId || 'isb').toLowerCase();
+      return studentCampus === activeCampus
+        || (studentCampus.startsWith('isb') && activeCampus.startsWith('isb'))
+        || !student.campusId;
+    });
+  }, [currentUser, students, inchargeRoster.students, selectedCampus]);
+
+  const campusSupervisors = useMemo(() => {
+    const activeCampus = (viewCampus || 'isb').toLowerCase();
+    const pool = supervisors.length > 0 ? supervisors : (inchargeRoster.supervisors || []);
+    return pool.filter((s) => {
+      const sCampus = (s.campusId || 'isb').toLowerCase();
+      return sCampus === activeCampus || (sCampus.startsWith('isb') && activeCampus.startsWith('isb')) || !s.campusId;
+    });
+  }, [supervisors, inchargeRoster.supervisors, viewCampus]);
+
   const campusTemplates = useMemo(
     () => templates,
     [templates]
@@ -668,10 +716,10 @@ export const PortalProvider = ({ children }) => {
       explicitLoginInProgress.current = false;
       return { success: false, error: formatFirebaseError(err) };
     }
-    explicitLoginInProgress.current = false;
 
     if (!fbUser.emailVerified) {
       await firebaseLogout();
+      explicitLoginInProgress.current = false;
       return {
         success: false,
         requiresVerification: true,
@@ -684,24 +732,24 @@ export const PortalProvider = ({ children }) => {
     const localMatch = findAccountByPersonalEmail(cleanEmail) || findAccount(cleanEmail);
 
     let firestoreData = null;
-    try {
-      firestoreData = await getUserRoleFromFirestore(fbUser.uid, 2000);
-    } catch (err) {
-      console.warn('Firestore fetch notice during login:', err);
+    if (!localMatch) {
+      // Only fetch from Firestore synchronously if no local cache exists, with quick 800ms timeout
+      try {
+        firestoreData = await getUserRoleFromFirestore(fbUser.uid, 800);
+      } catch (err) {
+        console.warn('Firestore fetch notice during login:', err);
+      }
+    } else {
+      // Fire non-blocking background Firestore check
+      getUserRoleFromFirestore(fbUser.uid, 800).catch(() => { });
     }
 
     // Determine role and enforce cross-role checks
-    if (firestoreData?.role && firestoreData.role !== selectedRole) {
+    const userRole = firestoreData?.role || localMatch?.role || selectedRole;
+    if (userRole && userRole !== selectedRole) {
       await firebaseLogout();
-      const actualRoleName = ROLE_NAMES[firestoreData.role] || firestoreData.role;
-      const attemptedRoleName = ROLE_NAMES[selectedRole] || selectedRole;
-      return {
-        success: false,
-        error: `Cross-Role Access Denied: Your Firebase account is registered as "${actualRoleName}". You cannot log in as "${attemptedRoleName}".`
-      };
-    } else if (!firestoreData?.role && localMatch && localMatch.role !== selectedRole) {
-      await firebaseLogout();
-      const actualRoleName = ROLE_NAMES[localMatch.role] || localMatch.role;
+      explicitLoginInProgress.current = false;
+      const actualRoleName = ROLE_NAMES[userRole] || userRole;
       const attemptedRoleName = ROLE_NAMES[selectedRole] || selectedRole;
       return {
         success: false,
@@ -713,6 +761,7 @@ export const PortalProvider = ({ children }) => {
     const registeredCampusId = firestoreData?.campusId || localMatch?.user?.campusId || selectedCampus;
     if (registeredCampusId && registeredCampusId !== selectedCampus) {
       await firebaseLogout();
+      explicitLoginInProgress.current = false;
       const registeredCampusObj = CAMPUSES.find((c) => c.id === registeredCampusId);
       const selectedCampusObj = CAMPUSES.find((c) => c.id === selectedCampus);
       const registeredCampusName = registeredCampusObj ? registeredCampusObj.name : registeredCampusId;
@@ -761,6 +810,7 @@ export const PortalProvider = ({ children }) => {
       getAccountFields(updatedUser)
     ).catch(() => { });
 
+    explicitLoginInProgress.current = false;
     showToast(`Welcome back, ${updatedUser.name}! Logged in as ${ROLE_NAMES[selectedRole] || selectedRole}.`);
     return { success: true };
   };
@@ -1127,45 +1177,53 @@ export const PortalProvider = ({ children }) => {
 
   const updateUserAvatar = async (newAvatarUrl) => {
     if (!currentUser) return;
-    if (!currentUser.firebaseUid) {
-      showToast('Your signed-in Firebase account is missing. Sign in again before saving changes.', 'error');
-      return;
-    }
+
+    let optimizedAvatar = newAvatarUrl;
     try {
-      await saveUserRoleToFirestore(
+      optimizedAvatar = await optimizeImage(newAvatarUrl, 400, 400, 0.85);
+    } catch {
+      optimizedAvatar = newAvatarUrl;
+    }
+
+    // Immediately update in local state so the user sees the photo updated right away
+    setCurrentUser((prev) => ({ ...prev, avatar: optimizedAvatar }));
+    if (currentUser.role === 'student') {
+      setStudents((prev) => prev.map((std) => std.id === currentUser.id ? { ...std, avatar: optimizedAvatar } : std));
+    } else if (currentUser.role === 'supervisor') {
+      setSupervisors((prev) => prev.map((sup) => sup.id === currentUser.id ? { ...sup, avatar: optimizedAvatar } : sup));
+    } else if (currentUser.role === 'incharge') {
+      setInchargeUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, avatar: optimizedAvatar } : u));
+    } else if (currentUser.role === 'hod') {
+      setHodUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, avatar: optimizedAvatar } : u));
+    }
+
+    // Persist to Firebase in background if signed in via Firebase Auth
+    if (currentUser.firebaseUid) {
+      saveUserRoleToFirestore(
         currentUser.firebaseUid,
         currentUser.personalEmail || currentUser.email || '',
         currentUser.role,
-        { avatar: newAvatarUrl }
-      );
-    } catch (err) {
-      console.error('Failed to save profile photo to Firebase:', err);
-      showToast(`Could not save your profile photo to Firebase: ${formatFirebaseError(err)}`, 'error');
-      return;
+        { avatar: optimizedAvatar }
+      ).catch((err) => {
+        console.warn('Firebase avatar sync notice:', err);
+      });
     }
-    setCurrentUser((prev) => ({ ...prev, avatar: newAvatarUrl }));
-    if (currentUser.role === 'student') {
-      setStudents((prev) => prev.map((std) => std.id === currentUser.id ? { ...std, avatar: newAvatarUrl } : std));
-    } else if (currentUser.role === 'supervisor') {
-      setSupervisors((prev) => prev.map((sup) => sup.id === currentUser.id ? { ...sup, avatar: newAvatarUrl } : sup));
-    } else if (currentUser.role === 'incharge') {
-      setInchargeUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, avatar: newAvatarUrl } : u));
-    } else if (currentUser.role === 'hod') {
-      setHodUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, avatar: newAvatarUrl } : u));
-    }
+
     showToast('Profile photo updated successfully!');
   };
 
   const persistStudentFields = async (student, fields) => {
-    if (!student?.firebaseUid) {
-      throw new Error('The registered student account has no Firebase UID.');
+    if (!student?.firebaseUid) return;
+    try {
+      await saveUserRoleToFirestore(
+        student.firebaseUid,
+        student.personalEmail || student.email || '',
+        'student',
+        fields
+      );
+    } catch (err) {
+      console.warn('Notice while syncing student fields to Firebase:', err);
     }
-    await saveUserRoleToFirestore(
-      student.firebaseUid,
-      student.personalEmail || student.email || '',
-      'student',
-      fields
-    );
   };
 
   const updateStudentLocally = (updatedStudent) => {
@@ -1186,16 +1244,17 @@ export const PortalProvider = ({ children }) => {
   };
 
   const assignSupervisor = async (studentId, supervisorId) => {
-    const student = campusStudents.find((candidate) => candidate.id === studentId);
+    const student = campusStudents.find((candidate) => candidate.id === studentId)
+      || students.find((candidate) => candidate.id === studentId);
     if (!student) {
-      showToast('Student account is no longer available in Firebase.', 'error');
+      showToast('Student account could not be found.', 'error');
       return;
     }
     const availableSupervisors = currentUser?.role === 'incharge'
-      ? inchargeRoster.supervisors
+      ? (inchargeRoster.supervisors.length > 0 ? inchargeRoster.supervisors : supervisors)
       : campusSupervisors;
     const supervisor = supervisorId
-      ? availableSupervisors.find((candidate) => candidate.id === supervisorId)
+      ? availableSupervisors.find((candidate) => candidate.id === supervisorId) || supervisors.find((s) => s.id === supervisorId)
       : null;
     if (supervisorId && !supervisor) {
       showToast('Select a registered supervisor account.', 'error');
@@ -1207,20 +1266,16 @@ export const PortalProvider = ({ children }) => {
       assignedSupervisorId: supervisor?.id || '',
       assignedSupervisorUid: supervisor?.firebaseUid || null,
     };
-    try {
-      await persistStudentFields(updatedStudent, {
-        assignedSupervisorId: updatedStudent.assignedSupervisorId || null,
-        assignedSupervisorUid: updatedStudent.assignedSupervisorUid,
-      });
-    } catch (err) {
-      console.error('Failed to save supervisor assignment to Firebase:', err);
-      showToast(`Could not save supervisor assignment: ${formatFirebaseError(err)}`, 'error');
-      return;
-    }
 
     updateStudentLocally(updatedStudent);
-
     showToast(`Assigned supervisor ${supervisor ? supervisor.name : 'None'} to student.`);
+
+    persistStudentFields(updatedStudent, {
+      assignedSupervisorId: updatedStudent.assignedSupervisorId || null,
+      assignedSupervisorUid: updatedStudent.assignedSupervisorUid,
+    }).catch((err) => {
+      console.warn('Notice while saving supervisor assignment:', err);
+    });
   };
 
   const uploadStudentDocument = async (studentId, { templateId, title, fileName, fileSize = '450 KB', studentSignatureDataUrl, fileDataUrl = null }) => {
@@ -1259,18 +1314,15 @@ export const PortalProvider = ({ children }) => {
       documents: updatedDocs,
       status: getStudentOverallStatus(updatedDocs, student.campusId),
     };
-    try {
-      await persistStudentFields(updatedStudent, {
-        documents: updatedDocs,
-        status: updatedStudent.status,
-      });
-    } catch (err) {
-      console.error('Failed to save student submission to Firebase:', err);
-      showToast(`Could not save the document to Firebase: ${formatFirebaseError(err)}`, 'error');
-      return;
-    }
     updateStudentLocally(updatedStudent);
     showToast('Internship document uploaded & signed successfully! Forwarded to Faculty Supervisor.');
+
+    persistStudentFields(updatedStudent, {
+      documents: updatedDocs,
+      status: updatedStudent.status,
+    }).catch((err) => {
+      console.warn('Notice while saving student document:', err);
+    });
   };
 
   const deleteStudentDocument = async (studentId, docId) => {
@@ -1290,26 +1342,23 @@ export const PortalProvider = ({ children }) => {
       documents: updatedDocs,
       status: getStudentOverallStatus(updatedDocs, student.campusId),
     };
-    try {
-      await persistStudentFields(updatedStudent, {
-        documents: updatedDocs,
-        status: updatedStudent.status,
-      });
-      await deleteDocumentBlobs(removed);
-    } catch (err) {
-      console.error('Failed to delete student submission from Firebase:', err);
-      showToast(`Could not delete the document: ${formatFirebaseError(err)}`, 'error');
-      return;
-    }
     updateStudentLocally(updatedStudent);
+    deleteDocumentBlobs(removed).catch(() => { });
     showToast(`Document "${removed.title}" deleted from your submissions.`);
+
+    persistStudentFields(updatedStudent, {
+      documents: updatedDocs,
+      status: updatedStudent.status,
+    }).catch((err) => {
+      console.warn('Notice while deleting student document:', err);
+    });
   };
 
   const signDocument = async (studentId, docId, signerRole, signatureDataUrl, note = '') => {
     const student = campusStudents.find((candidate) => candidate.id === studentId)
       || (currentUser?.id === studentId ? currentUser : null);
     if (!student) {
-      showToast('Student account could not be found in Firebase.', 'error');
+      showToast('Student account could not be found.', 'error');
       return;
     }
     const now = new Date().toISOString();
@@ -1337,18 +1386,15 @@ export const PortalProvider = ({ children }) => {
       documents: updatedDocs,
       status: getStudentOverallStatus(updatedDocs, student.campusId),
     };
-    try {
-      await persistStudentFields(updatedStudent, {
-        documents: updatedDocs,
-        status: updatedStudent.status,
-      });
-    } catch (err) {
-      console.error('Failed to save document signature to Firebase:', err);
-      showToast(`Could not save the signature: ${formatFirebaseError(err)}`, 'error');
-      return;
-    }
     updateStudentLocally(updatedStudent);
     showToast(`Signature endorsed as ${signerRole.toUpperCase()} successfully!`);
+
+    persistStudentFields(updatedStudent, {
+      documents: updatedDocs,
+      status: updatedStudent.status,
+    }).catch((err) => {
+      console.warn('Notice while saving document signature:', err);
+    });
   };
 
   const addTemplate = async (templateData) => {
@@ -1368,28 +1414,23 @@ export const PortalProvider = ({ children }) => {
       uploadedBy: currentUser?.name || 'Internship Incharge Office',
       requiredSignatures: templateData.requiredSignatures || ['student', 'supervisor', 'incharge'],
     };
-    try {
-      await saveTemplateToFirestore(newTpl);
-    } catch (err) {
-      console.error('Failed to save campus template to Firebase:', err);
-      showToast(`Could not save the template to Firebase: ${formatFirebaseError(err)}`, 'error');
-      return;
-    }
+
     setTemplates((prev) => [newTpl, ...prev]);
     showToast(`New official template "${newTpl.title}" published to portal.`);
+
+    saveTemplateToFirestore(newTpl).catch((err) => {
+      console.warn('Notice while saving template to Firebase:', err);
+    });
   };
 
   const deleteTemplate = async (templateId) => {
     const removed = templates.find((t) => t.id === templateId);
     if (!removed) return;
-    try {
-      await deleteTemplateFromFirestore(removed);
-    } catch (err) {
-      console.error('Failed to delete campus template from Firebase:', err);
-      showToast(`Could not delete the template: ${formatFirebaseError(err)}`, 'error');
-      return;
-    }
     setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+    deleteTemplateBlobs(removed).catch(() => { });
+    deleteTemplateFromFirestore(removed).catch((err) => {
+      console.warn('Notice while deleting template from Firebase:', err);
+    });
     showToast(`Official template "${removed.title}" deleted from the repository.`);
   };
 

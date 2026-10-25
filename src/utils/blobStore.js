@@ -140,3 +140,66 @@ export async function deleteDocumentBlobs(doc) {
     await blobDel(doc[idField]);
   }
 }
+
+export async function persistTemplates(templates) {
+  return Promise.all((templates || []).map(async (tpl) => {
+    let fileBlobId = tpl.fileBlobId;
+    if (isHeavy(tpl.fileDataUrl)) {
+      fileBlobId = fileBlobId || `template_file:${tpl.id}`;
+      await blobSet(fileBlobId, tpl.fileDataUrl);
+    }
+    return {
+      ...tpl,
+      fileDataUrl: isHeavy(tpl.fileDataUrl) ? undefined : tpl.fileDataUrl,
+      fileBlobId,
+    };
+  }));
+}
+
+export async function hydrateTemplates(templates) {
+  return Promise.all((templates || []).map(async (tpl) => {
+    const fileDataUrl = (tpl.fileBlobId ? await blobGet(tpl.fileBlobId) : null) || tpl.fileDataUrl || null;
+    return { ...tpl, fileDataUrl };
+  }));
+}
+
+export async function deleteTemplateBlobs(tpl) {
+  if (tpl?.fileBlobId) {
+    await blobDel(tpl.fileBlobId);
+  }
+}
+
+export function optimizeImage(dataUrl, maxWidth = 400, maxHeight = 400, quality = 0.85) {
+  return new Promise((resolve) => {
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
+      return resolve(dataUrl);
+    }
+    if (typeof window === 'undefined') return resolve(dataUrl);
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxWidth || height > maxHeight) {
+        if (width > height) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        } else {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
