@@ -18,47 +18,7 @@ export const DEPARTMENTS = [
   'Department of Mathematics',
 ];
 
-export const INITIAL_SUPERVISORS = [
-  {
-    id: 'sup-1',
-    regNo: 'EMP-CS-108',
-    name: 'Dr. Zeeshan Ali',
-    email: 'zeeshan.ali@isbfaculty.comsats.edu.pk',
-    designation: 'Associate Professor',
-    department: 'Department of Computer Science',
-    office: 'Room 204, Academic Block 2',
-    phone: '+92 51 90495204',
-    campusId: 'isb',
-    signature: null,
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80',
-  },
-  {
-    id: 'sup-2',
-    regNo: 'EMP-CS-214',
-    name: 'Dr. Farhana Kausar',
-    email: 'farhana.kausar@isbfaculty.comsats.edu.pk',
-    designation: 'Assistant Professor',
-    department: 'Department of Software Engineering',
-    office: 'Room 112, Academic Block 1',
-    phone: '+92 51 90495280',
-    campusId: 'isb',
-    signature: null,
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=160&q=80',
-  },
-  {
-    id: 'sup-3',
-    regNo: 'EMP-CS-302',
-    name: 'Engr. Tariq Mahmood',
-    email: 'tariq.mahmood@isbfaculty.comsats.edu.pk',
-    designation: 'Senior Lecturer',
-    department: 'Department of Computer Science',
-    office: 'Room 318, Academic Block 3',
-    phone: '+92 51 90495344',
-    campusId: 'isb',
-    signature: null,
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80',
-  },
-];
+export const INITIAL_SUPERVISORS = [];
 
 export const INITIAL_INCHARGE = {
   id: 'inc-1',

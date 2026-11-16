@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   ShieldCheck,
   Award,
@@ -17,21 +17,73 @@ import {
   Phone,
   LayoutDashboard,
   BookOpen,
+  Loader2,
 } from 'lucide-react';
 import { usePortal, isOfficialUniversityEmail } from '../../context/PortalContext';
 import StudentFilterBar from '../common/StudentFilterBar';
 import confetti from 'canvas-confetti';
+
+const normalizeDept = (dept) => (dept || '').toLowerCase().replace(/^department\s+of\s+/i, '').trim();
+
+const isSupervisorInDepartment = (sup, dept) => {
+  const normDept = normalizeDept(dept);
+  if (!normDept) return true;
+  const normSupDept = normalizeDept(sup?.department);
+  if (!normSupDept) return true;
+  return normSupDept === normDept || normSupDept.includes(normDept) || normDept.includes(normSupDept);
+};
+
+const isStudentInDepartment = (student, dept, supervisorList = []) => {
+  const normDept = normalizeDept(dept);
+  if (!normDept) return true;
+
+  const normStudentDept = normalizeDept(student?.department);
+  if (normStudentDept && (normStudentDept === normDept || normStudentDept.includes(normDept) || normDept.includes(normStudentDept))) {
+    return true;
+  }
+
+  const normProgram = (student?.program || '').toLowerCase();
+  if (normProgram.includes(normDept)) {
+    return true;
+  }
+  if (normDept === 'computer science') {
+    if (
+      normProgram.includes('computer science') ||
+      normProgram.includes('software engineering') ||
+      normProgram.includes('cyber') ||
+      normProgram.includes('data science') ||
+      normProgram.includes('artificial intelligence') ||
+      normProgram.includes('bcs') ||
+      normProgram.includes('bse')
+    ) {
+      return true;
+    }
+  }
+
+  if (student?.assignedSupervisorId) {
+    const sup = supervisorList.find((s) => s.id === student.assignedSupervisorId || s.firebaseUid === student.assignedSupervisorId);
+    if (sup && isSupervisorInDepartment(sup, dept)) {
+      return true;
+    }
+  }
+
+  if (!normStudentDept && !normProgram) {
+    return true;
+  }
+
+  return false;
+};
 
 export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, onOpenSignatureModal, onOpenDocumentViewer }) {
   const {
     currentUser,
     students,
     supervisors,
+    inchargeRosterLoading,
     getFilteredStudents,
     getSupervisorForStudent,
     isStudentFullyCleared,
     signDocument,
-    stats,
     setSubmissionFilter,
     setSearchQuery,
     setSelectedSupervisorFilter,
@@ -95,6 +147,58 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
     setProfileDraft({ ...savedProfile });
     setEditingProfile(false);
   };
+
+  // ── Department-based filtering & dynamic metrics ──
+  const hodDepartment = savedProfile.department || currentUser?.department || '';
+
+  const deptStudents = useMemo(() => {
+    return students.filter((student) => isStudentInDepartment(student, hodDepartment, supervisors));
+  }, [students, hodDepartment, supervisors]);
+
+  const deptSupervisors = useMemo(() => {
+    return supervisors.filter((sup) => isSupervisorInDepartment(sup, hodDepartment));
+  }, [supervisors, hodDepartment]);
+
+  const filteredDeptStudents = useMemo(() => {
+    return filteredStudents.filter((student) => isStudentInDepartment(student, hodDepartment, supervisors));
+  }, [filteredStudents, hodDepartment, supervisors]);
+
+  const deptStats = useMemo(() => {
+    return {
+      totalStudents: deptStudents.length,
+      pendingSubmission: deptStudents.filter((s) => {
+        const liveStatus = (!s.documents || s.documents.length === 0) ? 'pending_submission' : s.status;
+        return (!s.documents || s.documents.length === 0) || liveStatus === 'pending_submission';
+      }).length,
+      pendingSupervisor: deptStudents.filter((s) => s.status === 'pending_supervisor').length,
+      pendingIncharge: deptStudents.filter((s) => s.status === 'pending_incharge').length,
+      pendingHod: deptStudents.filter((s) => {
+        if (s.status === 'pending_hod') return true;
+        return (s.documents || []).some((doc) => doc.inchargeSigned && !doc.hodSigned);
+      }).length,
+      completed: deptStudents.filter((s) => isStudentFullyCleared(s)).length,
+    };
+  }, [deptStudents, isStudentFullyCleared]);
+
+  const uniquePrograms = useMemo(() => {
+    return [...new Set(deptStudents.map((s) => s.program).filter(Boolean))];
+  }, [deptStudents]);
+
+  const programsSubtitle = uniquePrograms.length > 0
+    ? uniquePrograms.join(' / ')
+    : (hodDepartment ? `${hodDepartment} Programs` : 'All Enrolled Programs');
+
+  const currentAcademicSession = useMemo(() => {
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    const semesterSeason = month >= 7 ? 'Fall' : 'Spring';
+    return `Session ${semesterSeason} ${year}`;
+  }, []);
+
+  const totalAssignedStudents = useMemo(() => {
+    return deptStudents.filter((s) => s.assignedSupervisorId).length;
+  }, [deptStudents]);
 
   // ── HOD clearance ──
   const handleHodApprove = (student, doc) => {
@@ -296,7 +400,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                         {savedProfile.name || currentUser?.name || 'NULL'}
                       </h2>
                       <p className="mt-1.5 text-base font-semibold" style={{ color: 'rgba(232,201,106,0.90)' }}>
-                        {savedProfile.designation || currentUser?.designation || 'NULL'}
+                        {savedProfile.designation || currentUser?.designation || 'Head of Department'}
                       </p>
                       <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.52)' }}>
                         {savedProfile.department || currentUser?.department ? `Department of ${savedProfile.department || currentUser?.department}` : 'Department: NULL'}&nbsp;·&nbsp;COMSATS University Islamabad
@@ -357,10 +461,10 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                     {/* Quick stat strip */}
                     <div className="flex flex-wrap gap-6 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.10)' }}>
                       {[
-                        { label: 'Total Students', value: stats.totalStudents, color: 'text-white' },
-                        { label: 'Cleared',         value: stats.completed,    color: 'text-emerald-400' },
-                        { label: 'Pending HOD Seal',value: stats.pendingHod,   color: 'text-yellow-400' },
-                        { label: 'Pending Submit',  value: stats.pendingSubmission, color: 'text-amber-300' },
+                        { label: 'Total Students', value: deptStats.totalStudents, color: 'text-white' },
+                        { label: 'Cleared',         value: deptStats.completed,    color: 'text-emerald-400' },
+                        { label: 'Pending HOD Seal',value: deptStats.pendingHod,   color: 'text-yellow-400' },
+                        { label: 'Pending Submit',  value: deptStats.pendingSubmission, color: 'text-amber-300' },
                       ].map(({ label, value, color }) => (
                         <div key={label}>
                           <div className={`text-2xl font-black ${color}`}>{value}</div>
@@ -380,15 +484,15 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
           {[
             {
               label: 'Total Enrolled',
-              value: stats.totalStudents,
-              sub: 'BS CS / BS SE Programs',
+              value: deptStats.totalStudents,
+              sub: programsSubtitle,
               bg: 'bg-white', border: 'border-slate-200', val: 'text-slate-900',
               icon: <Users className="w-5 h-5 text-slate-500" />, iconBg: 'bg-slate-100',
               filterId: 'all',
             },
             {
               label: 'Pending Submissions',
-              value: stats.pendingSubmission,
+              value: deptStats.pendingSubmission,
               sub: 'Require student action',
               bg: 'bg-amber-50', border: 'border-amber-200', val: 'text-amber-800',
               icon: <AlertCircle className="w-5 h-5 text-amber-600" />, iconBg: 'bg-amber-100',
@@ -396,7 +500,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
             },
             {
               label: 'Pending HOD Seal',
-              value: stats.pendingHod,
+              value: deptStats.pendingHod,
               sub: 'Ready for final clearance',
               bg: 'bg-purple-50', border: 'border-purple-200', val: 'text-purple-800',
               icon: <Clock className="w-5 h-5 text-purple-600" />, iconBg: 'bg-purple-100',
@@ -404,7 +508,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
             },
             {
               label: 'Degree Credits Cleared',
-              value: stats.completed,
+              value: deptStats.completed,
               sub: '3 Credits Awarded',
               bg: 'bg-emerald-50', border: 'border-emerald-200', val: 'text-emerald-800',
               icon: <CheckCircle2 className="w-5 h-5 text-emerald-600" />, iconBg: 'bg-emerald-100',
@@ -425,7 +529,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{card.label}</p>
                 <p className={`text-3xl font-black mt-1 ${card.val}`}>{card.value}</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">{card.sub}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[200px]" title={card.sub}>{card.sub}</p>
               </div>
               <div className={`w-11 h-11 rounded-xl ${card.iconBg} flex items-center justify-center shrink-0`}>
                 {card.icon}
@@ -470,7 +574,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
               </span>
               <h2 className="text-lg sm:text-xl font-extrabold text-white leading-tight">Faculty Supervision Distribution</h2>
               <p className="text-xs sm:text-sm mt-1" style={{ color: 'rgba(255,255,255,0.60)' }}>
-                Departmental workload overview &nbsp;·&nbsp; Session Fall 2026
+                Departmental workload overview &nbsp;·&nbsp; {currentAcademicSession}
               </p>
             </div>
           </div>
@@ -480,20 +584,22 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm text-center">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Faculty Members</p>
-            <p className="text-3xl font-black text-slate-900 mt-1">{supervisors.length}</p>
+            <p className="text-3xl font-black text-slate-900 mt-1">{deptSupervisors.length}</p>
             <p className="text-[11px] text-slate-400 mt-0.5">Actively supervising</p>
           </div>
           <div className="bg-purple-50 rounded-xl border border-purple-200 p-5 shadow-sm text-center">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Assigned</p>
-            <p className="text-3xl font-black text-purple-800 mt-1">{stats.totalStudents}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Across all supervisors</p>
+            <p className="text-3xl font-black text-purple-800 mt-1">{totalAssignedStudents}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {deptSupervisors.length > 0 ? `Across ${deptSupervisors.length} supervisor${deptSupervisors.length === 1 ? '' : 's'}` : 'No supervisors assigned'}
+            </p>
           </div>
           <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-5 shadow-sm text-center">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Dept. Clearance Rate</p>
             <p className="text-3xl font-black text-emerald-800 mt-1">
-              {stats.totalStudents > 0 ? Math.round((stats.completed / stats.totalStudents) * 100) : 0}%
+              {deptStudents.length > 0 ? Math.round((deptStats.completed / deptStudents.length) * 100) : 0}%
             </p>
-            <p className="text-[11px] text-slate-400 mt-0.5">{stats.completed} fully cleared</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">{deptStats.completed} fully cleared</p>
           </div>
         </div>
 
@@ -513,49 +619,68 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
             </div>
           </div>
 
-          <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {supervisors.map((sup) => {
-              const total = students.filter((s) => s.assignedSupervisorId === sup.id).length;
-              const cleared = students.filter((s) => s.assignedSupervisorId === sup.id && s.status === 'completed').length;
-              const pending = students.filter((s) => s.assignedSupervisorId === sup.id && s.status === 'pending_supervisor').length;
-              const pct = total > 0 ? Math.round((cleared / total) * 100) : 0;
-              const initial = sup.name.split(' ').pop()[0];
+          <div className="p-5">
+            {inchargeRosterLoading ? (
+              <div className="p-12 text-center flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
+                <p className="text-xs font-semibold text-slate-600">Loading faculty supervision workload...</p>
+              </div>
+            ) : deptSupervisors.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {deptSupervisors.map((sup) => {
+                  const total = deptStudents.filter((s) => s.assignedSupervisorId === sup.id || (sup.firebaseUid && s.assignedSupervisorUid === sup.firebaseUid)).length;
+                  const cleared = deptStudents.filter((s) => (s.assignedSupervisorId === sup.id || (sup.firebaseUid && s.assignedSupervisorUid === sup.firebaseUid)) && isStudentFullyCleared(s)).length;
+                  const pending = deptStudents.filter((s) => (s.assignedSupervisorId === sup.id || (sup.firebaseUid && s.assignedSupervisorUid === sup.firebaseUid)) && s.status === 'pending_supervisor').length;
+                  const pct = total > 0 ? Math.round((cleared / total) * 100) : 0;
+                  const initial = (sup.name || 'F').split(' ').filter(Boolean).pop()?.[0] || 'F';
 
-              return (
-                <div key={sup.id}
-                  className="p-5 bg-slate-50 rounded-xl border border-slate-200 hover:border-purple-200 hover:shadow-md transition-all"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-black text-base shrink-0"
-                        style={{ background: 'linear-gradient(135deg,#4c1d95,#7c3aed)' }}
-                      >
-                        {initial}
+                  return (
+                    <div key={sup.id || sup.firebaseUid}
+                      className="p-5 bg-slate-50 rounded-xl border border-slate-200 hover:border-purple-200 hover:shadow-md transition-all"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-black text-base shrink-0"
+                            style={{ background: 'linear-gradient(135deg,#4c1d95,#7c3aed)' }}
+                          >
+                            {initial}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900 text-sm">{sup.name}</div>
+                            <div className="text-[11px] text-slate-500">{sup.designation || 'Faculty Supervisor'}</div>
+                            <div className="text-[10px] font-mono text-slate-400">{sup.regNo || sup.email || 'EMP-N/A'}</div>
+                          </div>
+                        </div>
+                        <span className="text-2xl font-black text-purple-700">{total}</span>
                       </div>
-                      <div>
-                        <div className="font-bold text-slate-900 text-sm">{sup.name}</div>
-                        <div className="text-[11px] text-slate-500">{sup.designation}</div>
-                        <div className="text-[10px] font-mono text-slate-400">{sup.regNo}</div>
+
+                      <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-2">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#7c3aed,#a855f7)' }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span>{cleared} cleared &nbsp;·&nbsp; {pending} with supervisor</span>
+                        <span className="font-bold text-purple-700">{pct}% done</span>
                       </div>
                     </div>
-                    <span className="text-2xl font-black text-purple-700">{total}</span>
-                  </div>
-
-                  <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-2">
-                    <div
-                      className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#7c3aed,#a855f7)' }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-[10px] text-slate-500">
-                    <span>{cleared} cleared &nbsp;·&nbsp; {pending} with supervisor</span>
-                    <span className="font-bold text-purple-700">{pct}% done</span>
-                  </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-12 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-purple-50 flex items-center justify-center mx-auto mb-4 border border-purple-200">
+                  <Users className="w-8 h-8 text-purple-400" />
                 </div>
-              );
-            })}
+                <h4 className="font-bold text-slate-700 text-sm">No Faculty Supervisors Registered</h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  Faculty supervisors registered under {hodDepartment ? `Department of ${hodDepartment}` : 'your department'} will appear here with their supervision distribution.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -566,13 +691,11 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
   // TAB: DEPARTMENT ROSTER (candidate dossiers + final clearance)
   // ═══════════════════════════════════════════════════════════════
   if (activeTab === 'department_students') {
-    const clearanceStudents = filteredStudents
-      .map((student) => ({
-        ...student,
-        pendingDocs: (student.documents || []).filter((doc) => doc.inchargeSigned && !doc.hodSigned),
-      }))
-      .filter((student) => student.status !== 'completed' || student.pendingDocs.length > 0);
-    const fullyEndorsedStudents = students.filter((student) => isStudentFullyCleared(student));
+    const clearanceStudents = filteredDeptStudents.map((student) => ({
+      ...student,
+      pendingDocs: (student.documents || []).filter((doc) => doc.inchargeSigned && !doc.hodSigned),
+    }));
+
     return (
       <div className="space-y-6 fade-in">
         {/* Section banner */}
@@ -617,8 +740,8 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
               <div>
                 <h3 className="font-bold text-sm text-slate-900">Departmental Candidate Roster</h3>
                 <p className="text-[11px] text-slate-500">
-                  {stats.pendingHod > 0 && (
-                    <span className="text-purple-700 font-bold">{stats.pendingHod} awaiting your seal &nbsp;·&nbsp; </span>
+                  {deptStats.pendingHod > 0 && (
+                    <span className="text-purple-700 font-bold">{deptStats.pendingHod} awaiting your seal &nbsp;·&nbsp; </span>
                   )}
                   All clearance stages shown
                 </p>
@@ -629,7 +752,13 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
             </span>
           </div>
 
-          {clearanceStudents.length > 0 ? (
+          {inchargeRosterLoading ? (
+            <div className="p-16 text-center flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-8 h-8 text-[#002147] animate-spin" />
+              <h4 className="font-bold text-slate-700 text-sm">Loading Department Student Dossiers…</h4>
+              <p className="text-xs text-slate-400">Fetching student records from database.</p>
+            </div>
+          ) : clearanceStudents.length > 0 ? (
             <div className="divide-y divide-slate-100">
               {clearanceStudents.map((student) => {
                 const supervisor = getSupervisorForStudent(student);
@@ -643,18 +772,26 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                     <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
                       {/* Student info */}
                       <div className="flex items-center gap-4">
-                        <img
-                          src={student.avatar}
-                          alt={student.name}
-                          className="w-12 h-12 rounded-xl object-cover border-2 border-slate-200 shadow-sm shrink-0"
-                        />
+                        {student.avatar ? (
+                          <img
+                            src={student.avatar}
+                            alt={student.name || 'Student'}
+                            className="w-12 h-12 rounded-xl object-cover border-2 border-slate-200 shadow-sm shrink-0"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border-2 border-slate-300 flex items-center justify-center font-bold text-slate-700 text-base shadow-sm shrink-0">
+                            {(student.name || 'S')[0]?.toUpperCase()}
+                          </div>
+                        )}
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-slate-900 text-sm">{student.name}</span>
                             <span className="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                              {student.regNo}
+                              {student.regNo || 'REG-N/A'}
                             </span>
-                            <span className="text-[11px] text-slate-400">{student.program} · CGPA {student.cgpa}</span>
+                            <span className="text-[11px] text-slate-400">
+                              {student.program || 'Program not specified'} · CGPA {student.cgpa || 'N/A'}
+                            </span>
                           </div>
                           <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
                             <span className="flex items-center gap-1">
@@ -682,7 +819,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                           {status.label}
                         </span>
 
-                        {student.status === 'pending_hod' && primaryDoc && (
+                        {(student.status === 'pending_hod' || (primaryDoc && !primaryDoc.hodSigned && primaryDoc.inchargeSigned)) && primaryDoc && (
                           <button
                             onClick={() => handleHodApprove(student, primaryDoc)}
                             className="px-3 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow transition-all hover:opacity-90"
@@ -693,7 +830,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                           </button>
                         )}
 
-                        {hasDocs && (
+                        {hasDocs && onOpenDocumentViewer && (
                           <button
                             onClick={() => onOpenDocumentViewer(student, primaryDoc)}
                             className="px-3 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 shadow-sm transition-all"
@@ -729,7 +866,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                 <Users className="w-8 h-8 text-slate-300" />
               </div>
               <h4 className="font-bold text-slate-600 text-sm">No Students Found</h4>
-              <p className="text-xs text-slate-400 mt-1">Try resetting the filter above.</p>
+              <p className="text-xs text-slate-400 mt-1">Try resetting the filter above or check other clearance stages.</p>
             </div>
           )}
         </div>
@@ -742,7 +879,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
   // TAB: FULLY ENDORSED STUDENTS
   // ═══════════════════════════════════════════════════════════════
   if (activeTab === 'fully_endorsed') {
-    const fullyEndorsedStudents = students.filter((student) => isStudentFullyCleared(student));
+    const fullyEndorsedStudents = deptStudents.filter((student) => isStudentFullyCleared(student));
     return (
       <div className="space-y-6 fade-in">
         <div className="relative rounded-2xl overflow-hidden shadow-xl"
@@ -781,11 +918,17 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                   <div key={student.id} className="p-5 hover:bg-emerald-50/40 transition-colors">
                     <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
                       <div className="flex items-center gap-4 min-w-0">
-                        <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-xl object-cover border-2 border-emerald-200 shadow-sm shrink-0" />
+                        {student.avatar ? (
+                          <img src={student.avatar} alt={student.name || 'Student'} className="w-12 h-12 rounded-xl object-cover border-2 border-emerald-200 shadow-sm shrink-0" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-emerald-100 border-2 border-emerald-300 flex items-center justify-center font-bold text-emerald-800 text-base shadow-sm shrink-0">
+                            {(student.name || 'S')[0]?.toUpperCase()}
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-slate-900 text-sm">{student.name}</span>
-                            <span className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">{student.regNo}</span>
+                            <span className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">{student.regNo || 'REG-N/A'}</span>
                             <span className="text-[11px] text-slate-400">{student.program || 'Program not specified'} · CGPA {student.cgpa || 'N/A'}</span>
                           </div>
                           <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
@@ -798,6 +941,16 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border bg-emerald-100 text-emerald-900 border-emerald-300">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Fully Endorsed · 3 Cr
                         </span>
+                        {primaryDoc && onOpenDocumentViewer && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenDocumentViewer(student, primaryDoc)}
+                            className="px-3 py-1 rounded-lg text-xs font-semibold bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 flex items-center gap-1.5 shadow-sm transition-all"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                            View Form
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

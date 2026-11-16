@@ -458,7 +458,8 @@ export const PortalProvider = ({ children }) => {
         };
 
         const remoteSupervisors = (firebaseSupervisors || []).filter(matchesCampus);
-        const mergedSupervisors = latestSupervisors.current.map((local) => {
+        const validLocalSupervisors = latestSupervisors.current.filter((s) => s.firebaseUid || s.personalEmail);
+        const mergedSupervisors = validLocalSupervisors.map((local) => {
           const remote = remoteSupervisors.find(
             (r) => r.firebaseUid === local.firebaseUid || (r.personalEmail && r.personalEmail.toLowerCase() === (local.personalEmail || '').toLowerCase())
           );
@@ -1250,11 +1251,11 @@ export const PortalProvider = ({ children }) => {
       showToast('Student account could not be found.', 'error');
       return;
     }
-    const availableSupervisors = currentUser?.role === 'incharge'
-      ? (inchargeRoster.supervisors.length > 0 ? inchargeRoster.supervisors : supervisors)
-      : campusSupervisors;
+    const availableSupervisors = (inchargeRoster.supervisors && inchargeRoster.supervisors.length > 0)
+      ? inchargeRoster.supervisors
+      : (campusSupervisors.length > 0 ? campusSupervisors : supervisors);
     const supervisor = supervisorId
-      ? availableSupervisors.find((candidate) => candidate.id === supervisorId) || supervisors.find((s) => s.id === supervisorId)
+      ? availableSupervisors.find((candidate) => candidate.id === supervisorId || candidate.firebaseUid === supervisorId)
       : null;
     if (supervisorId && !supervisor) {
       showToast('Select a registered supervisor account.', 'error');
@@ -1435,11 +1436,14 @@ export const PortalProvider = ({ children }) => {
   };
 
   const getSupervisorForStudent = (student) => {
-    if (!student || !student.assignedSupervisorId) return null;
-    const availableSupervisors = currentUser?.role === 'incharge'
+    if (!student || (!student.assignedSupervisorId && !student.assignedSupervisorUid)) return null;
+    const availableSupervisors = (inchargeRoster.supervisors && inchargeRoster.supervisors.length > 0)
       ? inchargeRoster.supervisors
-      : supervisors;
-    return availableSupervisors.find((s) => s.id === student.assignedSupervisorId) || null;
+      : (campusSupervisors.length > 0 ? campusSupervisors : supervisors);
+    return availableSupervisors.find((s) =>
+      (student.assignedSupervisorId && (s.id === student.assignedSupervisorId || s.firebaseUid === student.assignedSupervisorId)) ||
+      (student.assignedSupervisorUid && s.firebaseUid === student.assignedSupervisorUid)
+    ) || null;
   };
 
   const getStudentLiveStatus = (student) => {
@@ -1556,7 +1560,7 @@ export const PortalProvider = ({ children }) => {
         campuses: CAMPUSES,
         currentUser,
         setCurrentUser,
-        supervisors: currentUser ? inchargeRoster.supervisors : [],
+        supervisors: currentUser ? (campusSupervisors.length > 0 ? campusSupervisors : inchargeRoster.supervisors) : [],
         students: campusStudents,
         inchargeRosterLoading,
         templates: campusTemplates,
