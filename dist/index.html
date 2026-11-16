@@ -1,51 +1,89 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Welcome to Firebase Hosting</title>
 
-<head>
-  <meta charset="UTF-8" />
+    <!-- update the version number as needed -->
+    <script defer src="/__/firebase/13.3.0/firebase-app-compat.js"></script>
+    <!-- include only the Firebase features as you need -->
+    <script defer src="/__/firebase/13.3.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/13.3.0/firebase-database-compat.js"></script>
+    <script defer src="/__/firebase/13.3.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/13.3.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/13.3.0/firebase-messaging-compat.js"></script>
+    <script defer src="/__/firebase/13.3.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/13.3.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/13.3.0/firebase-remote-config-compat.js"></script>
+    <script defer src="/__/firebase/13.3.0/firebase-performance-compat.js"></script>
+    <!-- 
+      initialize the SDK after all desired features are loaded, set useEmulator to false
+      to avoid connecting the SDK to running emulators.
+    -->
+    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
 
-  <!-- Viewport -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style media="screen">
+      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
+      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
+      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
+      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
+      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
+      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
+      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
+      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
+      @media (max-width: 600px) {
+        body, #message { margin-top: 0; background: white; box-shadow: none; }
+        body { border-top: 16px solid #ffa100; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="message">
+      <h2>Welcome</h2>
+      <h1>Firebase Hosting Setup Complete</h1>
+      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
+      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
+    </div>
+    <p id="load">Firebase SDK Loading&hellip;</p>
 
-  <!-- Primary SEO Meta -->
-  <title>CUOnline – Internship Management Portal | COMSATS University Islamabad</title>
-  <meta name="description"
-    content="CUOnline Internship & Corporate Placement Portal for COMSATS University Islamabad. Manage internship clearances, document submissions, supervisor endorsements, and HOD approvals online." />
-  <meta name="robots" content="index, follow" />
-  <meta name="theme-color" content="#002147" />
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const loadEl = document.querySelector('#load');
+        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+        // // The Firebase SDK is initialized and available here!
+        //
+        // firebase.auth().onAuthStateChanged(user => { });
+        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
+        // firebase.firestore().doc('/foo/bar').get().then(() => { });
+        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
+        // firebase.messaging().requestPermission().then(() => { });
+        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
+        // firebase.analytics(); // call to activate
+        // firebase.analytics().logEvent('tutorial_completed');
+        // firebase.performance(); // call to activate
+        //
+        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
 
-  <!-- Open Graph -->
-  <meta property="og:title" content="CUOnline Internship Management Portal | COMSATS University Islamabad" />
-  <meta property="og:description"
-    content="Official internship clearance and document management system for COMSATS University students and faculty." />
-  <meta property="og:type" content="website" />
-  <meta property="og:locale" content="en_PK" />
-
-  <!-- Favicon (inline SVG — zero network request) -->
-  <link rel="icon" type="image/svg+xml"
-    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23002147'/><circle cx='50' cy='50' r='40' fill='none' stroke='%23c29b38' stroke-width='3'/><path d='M50 20 L58 36 L76 38 L62 50 L66 68 L50 58 L34 68 L38 50 L24 38 L42 36 Z' fill='%23c29b38'/><text x='50' y='82' text-anchor='middle' fill='%23ffffff' font-size='11' font-family='Arial' font-weight='bold'>CUI SIS</text></svg>" />
-
-  <!-- Preload critical assets — logo is LCP image in Header -->
-  <link rel="preload" as="image" href="/cui-logo.png" fetchpriority="high" />
-
-  <!-- DNS preconnect for external image hosts (Unsplash avatars used in seed data) -->
-  <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
-  <link rel="dns-prefetch" href="https://images.unsplash.com" />
-
-  <!-- Firebase auth domain preconnect -->
-  <link rel="preconnect" href="https://internsip-docs-portal.firebaseapp.com" crossorigin />
-  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
-  <link rel="dns-prefetch" href="https://www.gstatic.com" />
-  <script type="module" crossorigin src="/assets/index-CR3OIaPo.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-C0FnF6B9.js">
-  <link rel="modulepreload" crossorigin href="/assets/icons-DN2CsQcL.js">
-  <link rel="modulepreload" crossorigin href="/assets/vendor-DTXNEk3B.js">
-  <link rel="modulepreload" crossorigin href="/assets/firebase-B4ZpLMTw.js">
-  <link rel="stylesheet" crossorigin href="/assets/index-CyMYigut.css">
-</head>
-
-<body class="bg-[#f0f4f8] text-slate-800 antialiased min-h-screen">
-  <div id="root"></div>
-</body>
-
+        try {
+          let app = firebase.app();
+          let features = [
+            'auth', 
+            'database', 
+            'firestore',
+            'functions',
+            'messaging', 
+            'storage', 
+            'analytics', 
+            'remoteConfig',
+            'performance',
+          ].filter(feature => typeof app[feature] === 'function');
+          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
+        } catch (e) {
+          console.error(e);
+          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
+        }
+      });
+    </script>
+  </body>
 </html>
