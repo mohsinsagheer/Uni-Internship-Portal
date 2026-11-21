@@ -251,7 +251,7 @@ const persistAccountAsset = async (uid, path, value) => {
     const assetRef = ref(storage, `users/${uid}/${path}`);
     await Promise.race([
       uploadString(assetRef, value, "data_url"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Storage upload timed out")), 1500)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Storage upload timed out")), 5000)),
     ]);
     return await getDownloadURL(assetRef);
   } catch (err) {
@@ -302,15 +302,20 @@ export const saveUserRoleToFirestore = async (uid, email, role, extraData = {}) 
       console.warn("Storage upload notice:", assetErr);
     }
     const userRef = doc(db, "users", uid);
+    const cleanEmail = email ? email.toLowerCase() : '';
+    const resolvedOfficialEmail = (persistedData.officialEmail || persistedData.email || cleanEmail).trim();
+    const dataToSave = {
+      uid,
+      role,
+      updatedAt: new Date().toISOString(),
+      ...persistedData,
+      email: resolvedOfficialEmail || cleanEmail,
+      officialEmail: resolvedOfficialEmail || cleanEmail,
+      personalEmail: persistedData.personalEmail || cleanEmail,
+    };
     await Promise.race([
-      setDoc(userRef, {
-        uid,
-        email: email ? email.toLowerCase() : '',
-        role,
-        updatedAt: new Date().toISOString(),
-        ...persistedData,
-      }, { merge: true }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore save timed out")), 1500)),
+      setDoc(userRef, dataToSave, { merge: true }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore save timed out")), 8000)),
     ]);
   } catch (err) {
     console.warn("Firestore save user role notice:", err?.message || err);
@@ -318,7 +323,7 @@ export const saveUserRoleToFirestore = async (uid, email, role, extraData = {}) 
 };
 
 // Fetch user role and details from Firebase Firestore with safety timeout and non-blocking fallback
-export const getUserRoleFromFirestore = async (uid, timeoutMs = 800) => {
+export const getUserRoleFromFirestore = async (uid, timeoutMs = 5000) => {
   try {
     const userRef = doc(db, "users", uid);
     const snap = await Promise.race([
@@ -336,7 +341,7 @@ export const getUserRoleFromFirestore = async (uid, timeoutMs = 800) => {
   return null;
 };
 
-export const getUsersByRoleFromFirestore = async (role, timeoutMs = 1000) => {
+export const getUsersByRoleFromFirestore = async (role, timeoutMs = 5000) => {
   try {
     const usersQuery = query(
       collection(db, "users"),

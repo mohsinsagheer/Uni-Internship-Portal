@@ -69,6 +69,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
     department: currentUser?.department || '',
     officialEmail: currentUser?.officialEmail || currentUser?.email || '',
     phone: currentUser?.phone || '',
+    office: currentUser?.office || '',
   });
   const [savedProfile, setSavedProfile] = useState({ ...profileDraft });
 
@@ -81,6 +82,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
       department: currentUser?.department || '',
       officialEmail: currentUser?.officialEmail || currentUser?.email || '',
       phone: currentUser?.phone || '',
+      office: currentUser?.office || '',
     };
     setProfileDraft(updated);
     setSavedProfile(updated);
@@ -98,6 +100,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
       department: profileDraft.department || null,
       officialEmail: officialEmail || null,
       phone: profileDraft.phone || null,
+      office: profileDraft.office || null,
     });
     setSavedProfile({ ...profileDraft, officialEmail });
     setEditingProfile(false);
@@ -214,6 +217,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
                     { key: 'name', label: 'Full Name', placeholder: 'Dr. / Mr. Full Name', type: 'text', autoComplete: 'name' },
                     { key: 'designation', label: 'Designation', placeholder: 'Lecturer / Assistant Professor', type: 'text', autoComplete: 'organization-title' },
                     { key: 'department', label: 'Department', placeholder: 'Computer Science', type: 'text', autoComplete: 'organization' },
+                    { key: 'office', label: 'Faculty Office', placeholder: 'e.g. Faculty Block A, Room 204', type: 'text', autoComplete: 'work' },
                     { key: 'officialEmail', label: 'Official University Email', placeholder: 'e.g. name@isbfaculty.comsats.edu.pk', type: 'email', autoComplete: 'email' },
                     { key: 'phone', label: 'Phone / Ext.', placeholder: 'e.g. 051-90495049', type: 'tel', autoComplete: 'tel' },
                   ].map(({ key, label, placeholder, type, autoComplete }) => (
@@ -265,6 +269,14 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
                     <span className="font-bold text-sky-200">Official Email:</span>
                     <span className="font-mono font-bold break-all">{savedProfile.officialEmail || currentUser?.officialEmail || currentUser?.email || 'NULL'}</span>
                   </span>
+                  {savedProfile.office && (
+                    <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
+                      style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.85)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(6px)' }}>
+                      <Building2 className="w-4 h-4 text-sky-300 shrink-0" />
+                      <span className="font-bold text-sky-200">Office:</span>
+                      <span>{savedProfile.office}</span>
+                    </span>
+                  )}
                   {savedProfile.phone ? (
                     <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
                       style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.80)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(6px)' }}>

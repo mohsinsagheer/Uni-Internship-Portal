@@ -62,6 +62,12 @@ const PROFILE_FIELDS = [
   'office',
   'email',
   'officialEmail',
+  'personalEmail',
+  'regNo',
+  'employeeId',
+  'campusId',
+  'role',
+  'profileCompleted',
 ];
 
 const ACCOUNT_FIELDS = [
@@ -371,7 +377,7 @@ export const PortalProvider = ({ children }) => {
         try {
           const cleanEmail = fbUser.email.toLowerCase();
           const localMatch = findAccountByPersonalEmail(cleanEmail);
-          const firestoreData = await getUserRoleFromFirestore(fbUser.uid, 2000).catch(() => null);
+          const firestoreData = await getUserRoleFromFirestore(fbUser.uid, 5000).catch(() => null);
           const role = firestoreData?.role || localMatch?.role || latestCurrentUser.current?.role;
           if (!role || !['student', 'supervisor', 'incharge', 'hod'].includes(role)) {
             return;
@@ -382,13 +388,15 @@ export const PortalProvider = ({ children }) => {
                 : role === 'hod' ? latestHodUsers.current : [];
           const cachedUser = roleUsers.find((user) => user.firebaseUid === fbUser.uid || (user.personalEmail && user.personalEmail.toLowerCase() === cleanEmail)) || localMatch?.user;
           const userCampus = firestoreData?.campusId || cachedUser?.campusId || selectedCampus || 'isb';
+          const officialEmail = (firestoreData?.officialEmail || firestoreData?.email || cachedUser?.officialEmail || cachedUser?.email || '').trim();
           const restoredUser = {
             ...getAccountFields(cachedUser),
             ...getAccountFields(firestoreData),
             id: cachedUser?.id || `${role.slice(0, 3)}-${fbUser.uid}`,
             regNo: firestoreData?.regNo || cachedUser?.regNo || fbUser.email.split('@')[0].toUpperCase(),
             name: firestoreData?.name || cachedUser?.name || fbUser.displayName || fbUser.email,
-            email: firestoreData?.officialEmail || cachedUser?.email || fbUser.email,
+            email: officialEmail || fbUser.email,
+            officialEmail: officialEmail || fbUser.email,
             personalEmail: cleanEmail,
             role,
             campusId: userCampus,
@@ -410,14 +418,12 @@ export const PortalProvider = ({ children }) => {
           }
           setCurrentUser(restoredUser);
           setSelectedCampus(userCampus);
-          if (cachedUser) {
-            saveUserRoleToFirestore(
-              fbUser.uid,
-              fbUser.email,
-              role,
-              getAccountFields(restoredUser)
-            ).catch(() => { });
-          }
+          saveUserRoleToFirestore(
+            fbUser.uid,
+            fbUser.email,
+            role,
+            getAccountFields(restoredUser)
+          ).catch(() => { });
         } catch (err) {
           console.warn('Notice while restoring signed-in account:', err);
         }
@@ -733,16 +739,10 @@ export const PortalProvider = ({ children }) => {
     const localMatch = findAccountByPersonalEmail(cleanEmail) || findAccount(cleanEmail);
 
     let firestoreData = null;
-    if (!localMatch) {
-      // Only fetch from Firestore synchronously if no local cache exists, with quick 800ms timeout
-      try {
-        firestoreData = await getUserRoleFromFirestore(fbUser.uid, 800);
-      } catch (err) {
-        console.warn('Firestore fetch notice during login:', err);
-      }
-    } else {
-      // Fire non-blocking background Firestore check
-      getUserRoleFromFirestore(fbUser.uid, 800).catch(() => { });
+    try {
+      firestoreData = await getUserRoleFromFirestore(fbUser.uid, 5000);
+    } catch (err) {
+      console.warn('Firestore fetch notice during login:', err);
     }
 
     // Determine role and enforce cross-role checks
@@ -778,13 +778,15 @@ export const PortalProvider = ({ children }) => {
         : selectedRole === 'incharge' ? latestInchargeUsers.current : latestHodUsers.current;
     const cachedUser = accountList.find((user) => user.firebaseUid === fbUser.uid || (user.personalEmail && user.personalEmail.toLowerCase() === cleanEmail)) || localMatch?.user;
 
+    const officialEmail = (firestoreData?.officialEmail || firestoreData?.email || cachedUser?.officialEmail || cachedUser?.email || '').trim();
     const updatedUser = {
       ...getAccountFields(cachedUser),
       ...getAccountFields(firestoreData),
       id: cachedUser?.id || `${selectedRole.slice(0, 3)}-${fbUser.uid}`,
       regNo: firestoreData?.regNo || cachedUser?.regNo || cleanEmail.split('@')[0].toUpperCase(),
       name: firestoreData?.name || cachedUser?.name || fbUser.displayName || cleanEmail,
-      email: firestoreData?.officialEmail || cachedUser?.email || cleanEmail,
+      email: officialEmail || cleanEmail,
+      officialEmail: officialEmail || cleanEmail,
       personalEmail: cleanEmail,
       role: selectedRole,
       campusId: registeredCampusId,
@@ -880,8 +882,10 @@ export const PortalProvider = ({ children }) => {
       regNo: cleanRegNo,
       personalEmail,
       officialEmail,
+      email: officialEmail,
       name: userData.name.trim(),
       campusId,
+      department: userData.department || (isStudent ? 'Department of Computer Science' : null),
       program: userData.program || null,
       semester: userData.semester || null,
       internshipCompany: userData.internshipCompany || null,
@@ -1144,6 +1148,13 @@ export const PortalProvider = ({ children }) => {
       Object.entries(updatedFields || {}).map(([key, value]) => [key, value === '' ? null : value])
     );
 
+    // Keep email and officialEmail in sync
+    if (sanitizedFields.officialEmail && !sanitizedFields.email) {
+      sanitizedFields.email = sanitizedFields.officialEmail;
+    } else if (sanitizedFields.email && !sanitizedFields.officialEmail) {
+      sanitizedFields.officialEmail = sanitizedFields.email;
+    }
+
     const updated = {
       ...currentUser,
       ...sanitizedFields,
@@ -1164,14 +1175,15 @@ export const PortalProvider = ({ children }) => {
     }
 
     setCurrentUser(updated);
+    const matcher = (u) => u.id === currentUser.id || (currentUser.firebaseUid && u.firebaseUid === currentUser.firebaseUid);
     if (currentUser.role === 'student') {
-      setStudents((prev) => prev.map((std) => std.id === currentUser.id ? { ...std, ...sanitizedFields, needsProfileCompletion: false } : std));
+      setStudents((prev) => prev.map((std) => matcher(std) ? { ...std, ...sanitizedFields, needsProfileCompletion: false } : std));
     } else if (currentUser.role === 'supervisor') {
-      setSupervisors((prev) => prev.map((sup) => sup.id === currentUser.id ? { ...sup, ...sanitizedFields, needsProfileCompletion: false } : sup));
+      setSupervisors((prev) => prev.map((sup) => matcher(sup) ? { ...sup, ...sanitizedFields, needsProfileCompletion: false } : sup));
     } else if (currentUser.role === 'incharge') {
-      setInchargeUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, ...sanitizedFields, needsProfileCompletion: false } : u));
+      setInchargeUsers((prev) => prev.map((u) => matcher(u) ? { ...u, ...sanitizedFields, needsProfileCompletion: false } : u));
     } else if (currentUser.role === 'hod') {
-      setHodUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, ...sanitizedFields, needsProfileCompletion: false } : u));
+      setHodUsers((prev) => prev.map((u) => matcher(u) ? { ...u, ...sanitizedFields, needsProfileCompletion: false } : u));
     }
     showToast('Official profile details updated successfully!');
   };
@@ -1188,14 +1200,15 @@ export const PortalProvider = ({ children }) => {
 
     // Immediately update in local state so the user sees the photo updated right away
     setCurrentUser((prev) => ({ ...prev, avatar: optimizedAvatar }));
+    const matcher = (u) => u.id === currentUser.id || (currentUser.firebaseUid && u.firebaseUid === currentUser.firebaseUid);
     if (currentUser.role === 'student') {
-      setStudents((prev) => prev.map((std) => std.id === currentUser.id ? { ...std, avatar: optimizedAvatar } : std));
+      setStudents((prev) => prev.map((std) => matcher(std) ? { ...std, avatar: optimizedAvatar } : std));
     } else if (currentUser.role === 'supervisor') {
-      setSupervisors((prev) => prev.map((sup) => sup.id === currentUser.id ? { ...sup, avatar: optimizedAvatar } : sup));
+      setSupervisors((prev) => prev.map((sup) => matcher(sup) ? { ...sup, avatar: optimizedAvatar } : sup));
     } else if (currentUser.role === 'incharge') {
-      setInchargeUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, avatar: optimizedAvatar } : u));
+      setInchargeUsers((prev) => prev.map((u) => matcher(u) ? { ...u, avatar: optimizedAvatar } : u));
     } else if (currentUser.role === 'hod') {
-      setHodUsers((prev) => prev.map((u) => u.id === currentUser.id ? { ...u, avatar: optimizedAvatar } : u));
+      setHodUsers((prev) => prev.map((u) => matcher(u) ? { ...u, avatar: optimizedAvatar } : u));
     }
 
     // Persist to Firebase in background if signed in via Firebase Auth

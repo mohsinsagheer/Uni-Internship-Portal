@@ -1,0 +1,240 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (matches Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required, 1-128 chars, immutable on update, matches auth.uid on create)
+    //   - role: string (required, in ['student', 'supervisor', 'incharge', 'hod'], immutable on update)
+    //   - id: string (optional, max 100 chars)
+    //   - firebaseUid: string (optional, max 128 chars)
+    //   - email: string (optional, max 120 chars) - Official university email
+    //   - officialEmail: string (optional, max 120 chars)
+    //   - personalEmail: string (optional, max 120 chars) - Personal email address
+    //   - name: string (optional, max 100 chars)
+    //   - campusId: string (optional, max 50 chars)
+    //   - department: string (optional, max 150 chars)
+    //   - designation: string (optional, max 150 chars)
+    //   - office: string (optional, max 150 chars)
+    //   - regNo: string (optional, max 50 chars)
+    //   - phone: string (optional, max 50 chars)
+    //   - avatar: string (optional, max 2,000,000 chars) - URL or Data URL
+    //   - signature: string (optional, max 2,000,000 chars) - URL or Data URL
+    //   - program: string (optional, max 100 chars)
+    //   - semester: string (optional, max 50 chars)
+    //   - cgpa: number | string (optional)
+    //   - creditHoursCompleted: number | string (optional)
+    //   - internshipCompany: string (optional, max 150 chars)
+    //   - internshipRole: string (optional, max 100 chars)
+    //   - internshipMode: string (optional, max 50 chars)
+    //   - internshipDuration: string (optional, max 50 chars)
+    //   - assignedSupervisorId: string (optional, max 100 chars)
+    //   - assignedSupervisorUid: string (optional, max 128 chars)
+    //   - status: string (optional, max 50 chars)
+    //   - documents: list (optional, max 100 items) - Submitted internship documents & signatures
+    //   - notifications: list (optional, max 200 items)
+    //   - profileCompleted: bool (optional)
+    //   - needsProfileCompletion: bool (optional)
+    //   - emailVerified: bool (optional)
+    //   - updatedAt: string (optional, max 60 chars)
+    //   - createdAt: string (optional, max 60 chars)
+    //
+    // Collection: templates
+    // Document ID: {templateId}
+    // Fields:
+    //   - id: string (required, 1-100 chars, matches templateId, immutable on update)
+    //   - campusId: string (required, 1-50 chars)
+    //   - title: string (required, 1-150 chars)
+    //   - code: string (optional, max 50 chars)
+    //   - category: string (optional, max 50 chars)
+    //   - description: string (optional, max 2,000 chars)
+    //   - version: string (optional, max 50 chars)
+    //   - fileName: string (optional, max 200 chars)
+    //   - fileSize: string (optional, max 50 chars)
+    //   - fileType: string (optional, max 100 chars)
+    //   - fileDataUrl: string (optional, max 2,000,000 chars)
+    //   - updatedDate: string (optional, max 50 chars)
+    //   - uploadedBy: string (optional, max 100 chars)
+    //   - requiredSignatures: list of strings (optional, max 20 items)
+    // ===============================================================
+
+    // Default deny all access at root
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidOptionalString(field, maxLen) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] == null ||
+        (request.resource.data[field] is string && request.resource.data[field].size() <= maxLen);
+    }
+
+    function isValidOptionalNumberOrString(field, maxLen) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] == null ||
+        request.resource.data[field] is int ||
+        request.resource.data[field] is float ||
+        (request.resource.data[field] is string && request.resource.data[field].size() <= maxLen);
+    }
+
+    function isValidOptionalBool(field) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] == null ||
+        request.resource.data[field] is bool;
+    }
+
+    function isValidOptionalList(field, maxSize) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] == null ||
+        (request.resource.data[field] is list && request.resource.data[field].size() <= maxSize);
+    }
+
+    function isStaff() {
+      return isAuthenticated() && (
+        (request.auth.token != null && 'role' in request.auth.token && request.auth.token.role in ['supervisor', 'incharge', 'hod']) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['supervisor', 'incharge', 'hod'])
+      );
+    }
+
+    function canUpdateUser(userId) {
+      return isAuthenticated() && (
+        isOwner(userId) ||
+        (isStaff() && resource.data.role == 'student')
+      );
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      let allowedUserFields = [
+        'uid', 'id', 'firebaseUid', 'role', 'email', 'officialEmail',
+        'personalEmail', 'name', 'campusId', 'department', 'designation',
+        'office', 'regNo', 'phone', 'avatar', 'signature', 'program',
+        'semester', 'cgpa', 'creditHoursCompleted', 'internshipCompany',
+        'internshipRole', 'internshipMode', 'internshipDuration',
+        'assignedSupervisorId', 'assignedSupervisorUid', 'status',
+        'documents', 'notifications', 'profileCompleted',
+        'needsProfileCompletion', 'emailVerified', 'updatedAt', 'createdAt'
+      ];
+
+      return request.resource.data.keys().hasOnly(allowedUserFields) &&
+        data.keys().hasAll(['uid', 'role']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        data.role in ['student', 'supervisor', 'incharge', 'hod'] &&
+        isValidOptionalString('id', 100) &&
+        isValidOptionalString('firebaseUid', 128) &&
+        isValidOptionalString('email', 120) &&
+        isValidOptionalString('officialEmail', 120) &&
+        isValidOptionalString('personalEmail', 120) &&
+        isValidOptionalString('name', 100) &&
+        isValidOptionalString('campusId', 50) &&
+        isValidOptionalString('department', 150) &&
+        isValidOptionalString('designation', 150) &&
+        isValidOptionalString('office', 150) &&
+        isValidOptionalString('regNo', 50) &&
+        isValidOptionalString('phone', 50) &&
+        isValidOptionalString('avatar', 2000000) &&
+        isValidOptionalString('signature', 2000000) &&
+        isValidOptionalString('program', 100) &&
+        isValidOptionalString('semester', 50) &&
+        isValidOptionalNumberOrString('cgpa', 50) &&
+        isValidOptionalNumberOrString('creditHoursCompleted', 50) &&
+        isValidOptionalString('internshipCompany', 150) &&
+        isValidOptionalString('internshipRole', 100) &&
+        isValidOptionalString('internshipMode', 50) &&
+        isValidOptionalString('internshipDuration', 50) &&
+        isValidOptionalString('assignedSupervisorId', 100) &&
+        isValidOptionalString('assignedSupervisorUid', 128) &&
+        isValidOptionalString('status', 50) &&
+        isValidOptionalList('documents', 100) &&
+        isValidOptionalList('notifications', 200) &&
+        isValidOptionalBool('profileCompleted') &&
+        isValidOptionalBool('needsProfileCompletion') &&
+        isValidOptionalBool('emailVerified') &&
+        isValidOptionalString('updatedAt', 60) &&
+        isValidOptionalString('createdAt', 60);
+    }
+
+    function isValidTemplate(data) {
+      let allowedTemplateFields = [
+        'id', 'campusId', 'code', 'title', 'category', 'description',
+        'version', 'fileName', 'fileSize', 'fileType', 'fileDataUrl',
+        'updatedDate', 'uploadedBy', 'requiredSignatures'
+      ];
+
+      return request.resource.data.keys().hasOnly(allowedTemplateFields) &&
+        data.keys().hasAll(['id', 'campusId', 'title']) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 100 &&
+        data.campusId is string && data.campusId.size() > 0 && data.campusId.size() <= 50 &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 150 &&
+        isValidOptionalString('code', 50) &&
+        isValidOptionalString('category', 50) &&
+        isValidOptionalString('description', 2000) &&
+        isValidOptionalString('version', 50) &&
+        isValidOptionalString('fileName', 200) &&
+        isValidOptionalString('fileSize', 50) &&
+        isValidOptionalString('fileType', 100) &&
+        isValidOptionalString('fileDataUrl', 2000000) &&
+        isValidOptionalString('updatedDate', 50) &&
+        isValidOptionalString('uploadedBy', 100) &&
+        isValidOptionalList('requiredSignatures', 20);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        isOwner(userId) &&
+        request.resource.data.uid == userId &&
+        isValidUser(request.resource.data);
+
+      allow update: if canUpdateUser(userId) &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.role == resource.data.role &&
+        isValidUser(request.resource.data);
+
+      allow delete: if isAuthenticated() &&
+        isOwner(userId);
+    }
+
+    // Templates collection
+    match /templates/{templateId} {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.id == templateId &&
+        isValidTemplate(request.resource.data);
+
+      allow update: if isAuthenticated() &&
+        request.resource.data.id == resource.data.id &&
+        isValidTemplate(request.resource.data);
+
+      allow delete: if isAuthenticated();
+    }
+  }
+}

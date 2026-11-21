@@ -74,8 +74,9 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
     name: currentUser?.name || '',
     designation: currentUser?.designation || '',
     department: currentUser?.department || '',
-    email: currentUser?.email || '',
+    email: currentUser?.officialEmail || currentUser?.email || '',
     phone: currentUser?.phone || '',
+    office: currentUser?.office || '',
   });
   const [savedProfile, setSavedProfile] = useState({ ...profileDraft });
 
@@ -84,8 +85,9 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
       name: currentUser?.name || '',
       designation: currentUser?.designation || '',
       department: currentUser?.department || '',
-      email: currentUser?.email || '',
+      email: currentUser?.officialEmail || currentUser?.email || '',
       phone: currentUser?.phone || '',
+      office: currentUser?.office || '',
     };
     setProfileDraft(updated);
     setSavedProfile(updated);
@@ -101,7 +103,9 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
       designation: profileDraft.designation || null,
       department: profileDraft.department || null,
       email: profileDraft.email || null,
+      officialEmail: profileDraft.email || null,
       phone: profileDraft.phone || null,
+      office: profileDraft.office || null,
     });
     setSavedProfile({ ...profileDraft });
     setEditingProfile(false);
@@ -372,6 +376,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
                         { key: 'name', label: 'Full Name', placeholder: 'Dr. / Mr. Full Name' },
                         { key: 'designation', label: 'Designation', placeholder: 'Internship Incharge' },
                         { key: 'department', label: 'Department', placeholder: 'Computer Science' },
+                        { key: 'office', label: 'Office Location', placeholder: 'e.g. Placement Cell, Student Service Centre' },
                         { key: 'email', label: 'Official University Email', placeholder: 'e.g. name@isbfaculty.comsats.edu.pk' },
                         { key: 'phone', label: 'Phone / Ext.', placeholder: 'e.g. 051-90495049' },
                       ].map(({ key, label, placeholder }) => (
@@ -420,6 +425,14 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
                         <span className="font-bold text-amber-200">Official Email:</span>
                         <span className="font-mono font-bold">{savedProfile.email || currentUser?.email || 'NULL'}</span>
                       </span>
+                      {savedProfile.office && (
+                        <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
+                          style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.90)', border: '1px solid rgba(255,255,255,0.22)', backdropFilter: 'blur(6px)' }}>
+                          <Building2 className="w-4 h-4 text-amber-300 shrink-0" />
+                          <span className="font-bold text-amber-200">Office:</span>
+                          <span>{savedProfile.office}</span>
+                        </span>
+                      )}
                       {savedProfile.phone ? (
                         <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
                           style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.82)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(6px)' }}>
