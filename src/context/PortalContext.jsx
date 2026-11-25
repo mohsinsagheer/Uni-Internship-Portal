@@ -745,6 +745,18 @@ export const PortalProvider = ({ children }) => {
       console.warn('Firestore fetch notice during login:', err);
     }
 
+    // ── ACCOUNT EXISTENCE GATE ──
+    // If no record exists in Firestore AND no match in local state, this email
+    // has never registered through the portal signup flow. Reject immediately.
+    if (!firestoreData && !localMatch) {
+      await firebaseLogout();
+      explicitLoginInProgress.current = false;
+      return {
+        success: false,
+        error: 'No registered account found for this email address. Please create an account first by clicking "Create Account".'
+      };
+    }
+
     // Determine role and enforce cross-role checks
     const userRole = firestoreData?.role || localMatch?.role || selectedRole;
     if (userRole && userRole !== selectedRole) {
