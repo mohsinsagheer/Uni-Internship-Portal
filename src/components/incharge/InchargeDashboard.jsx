@@ -24,7 +24,7 @@ import {
   BookOpen,
   Trash2,
 } from 'lucide-react';
-import { usePortal, downloadTemplateFile, isOfficialUniversityEmail } from '../../context/PortalContext';
+import { usePortal, downloadTemplateFile, isValidOfficialEmailForRole, formatOfficialEmailForDisplay } from '../../context/PortalContext';
 import StudentFilterBar from '../common/StudentFilterBar';
 
 export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTab, onOpenSignatureModal, onOpenDocumentViewer }) {
@@ -69,23 +69,25 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
   };
 
   // ── Profile edit ──
+  const formattedOfficialEmail = formatOfficialEmailForDisplay(currentUser);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState({
     name: currentUser?.name || '',
     designation: currentUser?.designation || '',
     department: currentUser?.department || '',
-    email: currentUser?.officialEmail || currentUser?.email || '',
+    email: formattedOfficialEmail === 'NULL' ? '' : formattedOfficialEmail,
     phone: currentUser?.phone || '',
     office: currentUser?.office || '',
   });
   const [savedProfile, setSavedProfile] = useState({ ...profileDraft });
 
   useEffect(() => {
+    const resolvedEmail = formatOfficialEmailForDisplay(currentUser);
     const updated = {
       name: currentUser?.name || '',
       designation: currentUser?.designation || '',
       department: currentUser?.department || '',
-      email: currentUser?.officialEmail || currentUser?.email || '',
+      email: resolvedEmail === 'NULL' ? '' : resolvedEmail,
       phone: currentUser?.phone || '',
       office: currentUser?.office || '',
     };
@@ -94,8 +96,8 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
   }, [currentUser]);
 
   const handleSaveProfile = () => {
-    if (profileDraft.email && !isOfficialUniversityEmail(profileDraft.email)) {
-      showToast('Official email must end with @isbfaculty.comsats.edu.pk or @isbstudents.comsats.edu.pk', 'error');
+    if (profileDraft.email && !isValidOfficialEmailForRole(profileDraft.email, 'incharge')) {
+      showToast('Official employee email must follow first-name.second-name@comsats.edu.pk', 'error');
       return;
     }
     updateUserProfile({
@@ -214,8 +216,33 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
     );
   };
 
+  const [pendingSupervisorChange, setPendingSupervisorChange] = useState(null);
+
   const handleSupervisorChange = (studentId, newSupervisorId) => {
+    const targetStudent = students.find((s) => s.id === studentId);
+    const currentSup = targetStudent ? getSupervisorForStudent(targetStudent) : null;
+    const currentSupId = targetStudent?.assignedSupervisorId || currentSup?.id || '';
+
+    if (targetStudent && (currentSup || currentSupId) && newSupervisorId !== currentSupId) {
+      const nextSup = newSupervisorId
+        ? supervisors.find((sup) => sup.id === newSupervisorId || sup.firebaseUid === newSupervisorId)
+        : null;
+      setPendingSupervisorChange({
+        student: targetStudent,
+        currentSupervisor: currentSup,
+        newSupervisor: nextSup,
+        newSupervisorId: newSupervisorId || null,
+      });
+      return;
+    }
+
     assignSupervisor(studentId, newSupervisorId || null);
+  };
+
+  const confirmSupervisorChange = () => {
+    if (!pendingSupervisorChange) return;
+    assignSupervisor(pendingSupervisorChange.student.id, pendingSupervisorChange.newSupervisorId);
+    setPendingSupervisorChange(null);
   };
 
   const getStatusConfig = (student) => {
@@ -377,7 +404,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
                         { key: 'designation', label: 'Designation', placeholder: 'Internship Incharge' },
                         { key: 'department', label: 'Department', placeholder: 'Computer Science' },
                         { key: 'office', label: 'Office Location', placeholder: 'e.g. Placement Cell, Student Service Centre' },
-                        { key: 'email', label: 'Official University Email', placeholder: 'e.g. name@isbfaculty.comsats.edu.pk' },
+                        { key: 'email', label: 'Official University Email', placeholder: 'e.g. first.second@comsats.edu.pk' },
                         { key: 'phone', label: 'Phone / Ext.', placeholder: 'e.g. 051-90495049' },
                       ].map(({ key, label, placeholder }) => (
                         <div key={key}>
@@ -423,7 +450,7 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
                         style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.92)', border: '1px solid rgba(255,255,255,0.22)', backdropFilter: 'blur(6px)' }}>
                         <Mail className="w-4 h-4 text-amber-300 shrink-0" />
                         <span className="font-bold text-amber-200">Official Email:</span>
-                        <span className="font-mono font-bold">{savedProfile.email || currentUser?.email || 'NULL'}</span>
+                        <span className="font-mono font-bold">{savedProfile.email || formatOfficialEmailForDisplay(currentUser)}</span>
                       </span>
                       {savedProfile.office && (
                         <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
@@ -616,6 +643,52 @@ export default function InchargeDashboard({ activeTab = 'dashboard', setActiveTa
             </div>
           )}
         </div>
+
+        {pendingSupervisorChange && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-amber-200 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Warning: Change Assigned Supervisor?</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    This student already has an assigned faculty supervisor
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                <strong>{pendingSupervisorChange.student.name}</strong> ({pendingSupervisorChange.student.regNo}) is currently supervised by{' '}
+                <strong className="text-slate-900">{pendingSupervisorChange.currentSupervisor?.name || 'an assigned supervisor'}</strong>.
+              </p>
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-900 space-y-1">
+                <p className="font-bold">Reassignment Notice:</p>
+                <p>
+                  You are about to change their supervisor to{' '}
+                  <strong>{pendingSupervisorChange.newSupervisor ? pendingSupervisorChange.newSupervisor.name : 'Not Assigned'}</strong>.
+                  This may affect ongoing supervision and document endorsement reviews.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingSupervisorChange(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmSupervisorChange}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  Confirm Change
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {studentToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">

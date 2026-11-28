@@ -38,7 +38,66 @@ const PortalContext = createContext();
 export const isOfficialUniversityEmail = (email) => {
   if (!email || typeof email !== 'string') return false;
   const lower = email.trim().toLowerCase();
-  return lower.endsWith('@isbstudents.comsats.edu.pk') || lower.endsWith('@isbfaculty.comsats.edu.pk');
+  return (
+    lower.endsWith('@comsats.edu.pk')
+    || lower.endsWith('@isbstudent.comsats.edu.pk')
+    || lower.endsWith('@isbstudents.comsats.edu.pk')
+    || lower.endsWith('@isbfaculty.comsats.edu.pk')
+  );
+};
+
+export const buildEmployeeOfficialEmail = (name, fallbackId = '') => {
+  const stripped = (name || '')
+    .trim()
+    .replace(/^(?:(?:prof|dr|mr|mrs|ms|miss|engr|sir|madam)\.?\s+)+/i, '')
+    .trim();
+  const parts = stripped
+    .split(/\s+/)
+    .map((part) => part.toLowerCase().replace(/[^a-z0-9]/g, ''))
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]}.${parts[1]}@comsats.edu.pk`;
+  }
+  if (parts.length === 1) {
+    return `${parts[0]}@comsats.edu.pk`;
+  }
+  const cleanFallback = (fallbackId || 'employee').toLowerCase().replace(/[^a-z0-9]/g, '') || 'employee';
+  return `${cleanFallback}@comsats.edu.pk`;
+};
+
+export const isValidOfficialEmailForRole = (email, role) => {
+  if (!email || typeof email !== 'string') return false;
+  const trimmed = email.trim();
+  const lower = trimmed.toLowerCase();
+  if (role === 'student') {
+    return /^[^@\s]+@isbstudent\.comsats\.edu\.pk$/i.test(trimmed);
+  }
+  return (
+    lower.endsWith('@comsats.edu.pk')
+    && !lower.endsWith('@isbstudent.comsats.edu.pk')
+    && !lower.endsWith('@isbstudents.comsats.edu.pk')
+    && !lower.endsWith('@isbfaculty.comsats.edu.pk')
+    && /^[^@\s]+@comsats\.edu\.pk$/i.test(trimmed)
+  );
+};
+
+export const formatOfficialEmailForDisplay = (user) => {
+  if (!user) return 'NULL';
+  const rawEmail = (user.officialEmail || user.email || '').trim();
+  const role = user.role || (user.id?.startsWith('std-') ? 'student' : 'employee');
+
+  if (role === 'student') {
+    if (isValidOfficialEmailForRole(rawEmail, 'student')) {
+      return rawEmail;
+    }
+    const regNo = (user.regNo || (rawEmail.includes('@') ? rawEmail.split('@')[0] : '')).trim().toUpperCase();
+    return regNo ? `${regNo}@ISBSTUDENT.COMSATS.EDU.PK` : (rawEmail || 'NULL');
+  }
+
+  if (isValidOfficialEmailForRole(rawEmail, role)) {
+    return rawEmail;
+  }
+  return buildEmployeeOfficialEmail(user.name, user.regNo);
 };
 
 const findPersonalEmailAccount = (users, email) => {
@@ -122,6 +181,7 @@ export const isUserMatch = (user, identifier) => {
 
   if (rawId) {
     const candidates = [
+      `${rawId}@isbstudent.comsats.edu.pk`,
       `${rawId}@isbstudents.comsats.edu.pk`,
       `${rawId}@isbfaculty.comsats.edu.pk`,
       `${rawId}@isb.comsats.edu.pk`,
@@ -133,6 +193,7 @@ export const isUserMatch = (user, identifier) => {
   if (userEmail && userEmail.includes('@')) {
     const userPrefix = userEmail.split('@')[0];
     const candidates = [
+      `${userPrefix}@isbstudent.comsats.edu.pk`,
       `${userPrefix}@isbstudents.comsats.edu.pk`,
       `${userPrefix}@isbfaculty.comsats.edu.pk`,
       `${userPrefix}@isb.comsats.edu.pk`,
@@ -253,7 +314,7 @@ export const PortalProvider = ({ children }) => {
     const saved = readJson(STORAGE_KEYS.CURRENT_USER, null);
     return saved ? withCampus({ ...saved, notifications: saved.notifications || [] }) : null;
   });
-  const [inchargeRoster, setInchargeRoster] = useState({ students: [], supervisors: [] });
+  const [inchargeRoster, setInchargeRoster] = useState({ students: [], supervisors: [], loaded: false });
   const [inchargeRosterLoading, setInchargeRosterLoading] = useState(false);
 
   // Ref always holds the latest state values for use in callbacks
@@ -388,13 +449,20 @@ export const PortalProvider = ({ children }) => {
                 : role === 'hod' ? latestHodUsers.current : [];
           const cachedUser = roleUsers.find((user) => user.firebaseUid === fbUser.uid || (user.personalEmail && user.personalEmail.toLowerCase() === cleanEmail)) || localMatch?.user;
           const userCampus = firestoreData?.campusId || cachedUser?.campusId || selectedCampus || 'isb';
-          const officialEmail = (firestoreData?.officialEmail || firestoreData?.email || cachedUser?.officialEmail || cachedUser?.email || '').trim();
+          const resolvedRegNo = firestoreData?.regNo || cachedUser?.regNo || fbUser.email.split('@')[0].toUpperCase();
+          const resolvedName = firestoreData?.name || cachedUser?.name || fbUser.displayName || fbUser.email;
+          const officialEmail = formatOfficialEmailForDisplay({
+            role,
+            regNo: resolvedRegNo,
+            name: resolvedName,
+            officialEmail: firestoreData?.officialEmail || firestoreData?.email || cachedUser?.officialEmail || cachedUser?.email || '',
+          });
           const restoredUser = {
             ...getAccountFields(cachedUser),
             ...getAccountFields(firestoreData),
             id: cachedUser?.id || `${role.slice(0, 3)}-${fbUser.uid}`,
-            regNo: firestoreData?.regNo || cachedUser?.regNo || fbUser.email.split('@')[0].toUpperCase(),
-            name: firestoreData?.name || cachedUser?.name || fbUser.displayName || fbUser.email,
+            regNo: resolvedRegNo,
+            name: resolvedName,
             email: officialEmail || fbUser.email,
             officialEmail: officialEmail || fbUser.email,
             personalEmail: cleanEmail,
@@ -441,7 +509,7 @@ export const PortalProvider = ({ children }) => {
   const inchargeCampus = currentUser?.campusId || selectedCampus;
   useEffect(() => {
     if (!currentUser || currentUser.role === 'student') {
-      setInchargeRoster({ students: [], supervisors: [] });
+      setInchargeRoster({ students: [], supervisors: [], loaded: false });
       setInchargeRosterLoading(false);
       return undefined;
     }
@@ -451,9 +519,15 @@ export const PortalProvider = ({ children }) => {
 
     const loadInchargeRoster = async () => {
       try {
-        const [firebaseStudents, firebaseSupervisors] = await Promise.all([
-          getUsersByRoleFromFirestore('student', 1000).catch(() => []),
-          getUsersByRoleFromFirestore('supervisor', 1000).catch(() => []),
+        const [studentsRes, supervisorsRes] = await Promise.all([
+          getUsersByRoleFromFirestore('student', 1000).then(
+            (list) => ({ ok: true, list: Array.isArray(list) ? list : [] }),
+            () => ({ ok: false, list: [] })
+          ),
+          getUsersByRoleFromFirestore('supervisor', 1000).then(
+            (list) => ({ ok: true, list: Array.isArray(list) ? list : [] }),
+            () => ({ ok: false, list: [] })
+          ),
         ]);
         if (cancelled) return;
 
@@ -463,67 +537,61 @@ export const PortalProvider = ({ children }) => {
           return userCampus === targetCampus || (userCampus.startsWith('isb') && targetCampus.startsWith('isb'));
         };
 
-        const remoteSupervisors = (firebaseSupervisors || []).filter(matchesCampus);
-        const validLocalSupervisors = latestSupervisors.current.filter((s) => s.firebaseUid || s.personalEmail);
-        const mergedSupervisors = validLocalSupervisors.map((local) => {
-          const remote = remoteSupervisors.find(
-            (r) => r.firebaseUid === local.firebaseUid || (r.personalEmail && r.personalEmail.toLowerCase() === (local.personalEmail || '').toLowerCase())
-          );
-          return remote ? { ...local, ...remote } : local;
-        });
-        remoteSupervisors.forEach((remote) => {
-          if (!mergedSupervisors.some((s) => s.firebaseUid === remote.firebaseUid || (s.personalEmail && s.personalEmail.toLowerCase() === (remote.personalEmail || '').toLowerCase()))) {
-            mergedSupervisors.push({
+        const remoteSupervisors = supervisorsRes.list.filter(matchesCampus);
+        let mergedSupervisors;
+        if (supervisorsRes.ok) {
+          mergedSupervisors = remoteSupervisors.map((remote) => {
+            const local = latestSupervisors.current.find(
+              (l) => l.firebaseUid === remote.firebaseUid || (l.personalEmail && remote.personalEmail && l.personalEmail.toLowerCase() === remote.personalEmail.toLowerCase())
+            );
+            return {
+              ...(local || {}),
               ...remote,
-              id: remote.id || `sup-${remote.firebaseUid}`,
+              id: remote.id || local?.id || `sup-${remote.firebaseUid}`,
               role: 'supervisor',
-            });
-          }
-        });
+            };
+          });
+        } else {
+          const validLocalSupervisors = latestSupervisors.current.filter((s) => s.firebaseUid || s.personalEmail);
+          mergedSupervisors = validLocalSupervisors;
+        }
 
         const supervisorByUid = new Map(
           mergedSupervisors.map((supervisor) => [supervisor.firebaseUid, supervisor])
         );
         const supervisorIds = new Set(mergedSupervisors.map((supervisor) => supervisor.id));
 
-        const remoteStudents = (firebaseStudents || []).filter(matchesCampus);
-        const mergedStudents = latestStudents.current.map((local) => {
-          const remote = remoteStudents.find(
-            (r) => r.firebaseUid === local.firebaseUid || (r.personalEmail && r.personalEmail.toLowerCase() === (local.personalEmail || '').toLowerCase())
-          );
-          if (!remote) return local;
-          const assignedSupervisorId = remote.assignedSupervisorUid
-            ? supervisorByUid.get(remote.assignedSupervisorUid)?.id || ''
-            : (remote.assignedSupervisorId || local.assignedSupervisorId || '');
-          return {
-            ...local,
-            ...remote,
-            assignedSupervisorId: supervisorIds.has(assignedSupervisorId) ? assignedSupervisorId : (local.assignedSupervisorId || ''),
-          };
-        });
-
-        remoteStudents.forEach((remote) => {
-          if (!mergedStudents.some((s) => s.firebaseUid === remote.firebaseUid || (s.personalEmail && s.personalEmail.toLowerCase() === (remote.personalEmail || '').toLowerCase()))) {
+        const remoteStudents = studentsRes.list.filter(matchesCampus);
+        let mergedStudents;
+        if (studentsRes.ok) {
+          // Database fetch succeeded: only show the updated list of student users fetched from database
+          mergedStudents = remoteStudents.map((remote) => {
+            const local = latestStudents.current.find(
+              (l) => l.firebaseUid === remote.firebaseUid || (l.personalEmail && remote.personalEmail && l.personalEmail.toLowerCase() === remote.personalEmail.toLowerCase())
+            );
             const assignedSupervisorId = remote.assignedSupervisorUid
               ? supervisorByUid.get(remote.assignedSupervisorUid)?.id || ''
-              : (remote.assignedSupervisorId || '');
-            mergedStudents.push({
+              : (remote.assignedSupervisorId || local?.assignedSupervisorId || '');
+            return {
+              ...(local || {}),
               ...remote,
-              id: remote.id || `std-${remote.firebaseUid}`,
+              id: remote.id || local?.id || `std-${remote.firebaseUid}`,
               role: 'student',
               assignedSupervisorId: supervisorIds.has(assignedSupervisorId) ? assignedSupervisorId : '',
-            });
-          }
-        });
+            };
+          });
+        } else {
+          mergedStudents = latestStudents.current;
+        }
 
         const deduplicated = deduplicateStudents(mergedStudents);
         setStudents(deduplicated);
         setSupervisors(mergedSupervisors);
-        setInchargeRoster({ students: deduplicated, supervisors: mergedSupervisors });
+        setInchargeRoster({ students: deduplicated, supervisors: mergedSupervisors, loaded: studentsRes.ok });
       } catch (err) {
         console.warn('Notice while loading roster:', err);
         if (!cancelled) {
-          setInchargeRoster({ students: latestStudents.current, supervisors: latestSupervisors.current });
+          setInchargeRoster({ students: latestStudents.current, supervisors: latestSupervisors.current, loaded: false });
         }
       } finally {
         if (!cancelled) setInchargeRosterLoading(false);
@@ -571,14 +639,17 @@ export const PortalProvider = ({ children }) => {
   const campusStudents = useMemo(() => {
     if (!currentUser) return [];
     const activeCampus = (currentUser?.campusId || selectedCampus || 'isb').toLowerCase();
-    const pool = deduplicateStudents([...students, ...(inchargeRoster.students || [])]);
-    return pool.filter((student) => {
+    // For HOD (and other non-student roles once database roster is loaded), use only the database-fetched list
+    const sourceStudents = (currentUser.role !== 'student' && inchargeRoster.loaded)
+      ? (inchargeRoster.students || [])
+      : deduplicateStudents([...students, ...(inchargeRoster.students || [])]);
+    return sourceStudents.filter((student) => {
       const studentCampus = (student.campusId || 'isb').toLowerCase();
       return studentCampus === activeCampus
         || (studentCampus.startsWith('isb') && activeCampus.startsWith('isb'))
         || !student.campusId;
     });
-  }, [currentUser, students, inchargeRoster.students, selectedCampus]);
+  }, [currentUser, students, inchargeRoster.students, inchargeRoster.loaded, selectedCampus]);
 
   const campusSupervisors = useMemo(() => {
     const activeCampus = (viewCampus || 'isb').toLowerCase();
@@ -790,13 +861,20 @@ export const PortalProvider = ({ children }) => {
         : selectedRole === 'incharge' ? latestInchargeUsers.current : latestHodUsers.current;
     const cachedUser = accountList.find((user) => user.firebaseUid === fbUser.uid || (user.personalEmail && user.personalEmail.toLowerCase() === cleanEmail)) || localMatch?.user;
 
-    const officialEmail = (firestoreData?.officialEmail || firestoreData?.email || cachedUser?.officialEmail || cachedUser?.email || '').trim();
+    const resolvedRegNo = firestoreData?.regNo || cachedUser?.regNo || cleanEmail.split('@')[0].toUpperCase();
+    const resolvedName = firestoreData?.name || cachedUser?.name || fbUser.displayName || cleanEmail;
+    const officialEmail = formatOfficialEmailForDisplay({
+      role: selectedRole,
+      regNo: resolvedRegNo,
+      name: resolvedName,
+      officialEmail: firestoreData?.officialEmail || firestoreData?.email || cachedUser?.officialEmail || cachedUser?.email || '',
+    });
     const updatedUser = {
       ...getAccountFields(cachedUser),
       ...getAccountFields(firestoreData),
       id: cachedUser?.id || `${selectedRole.slice(0, 3)}-${fbUser.uid}`,
-      regNo: firestoreData?.regNo || cachedUser?.regNo || cleanEmail.split('@')[0].toUpperCase(),
-      name: firestoreData?.name || cachedUser?.name || fbUser.displayName || cleanEmail,
+      regNo: resolvedRegNo,
+      name: resolvedName,
       email: officialEmail || cleanEmail,
       officialEmail: officialEmail || cleanEmail,
       personalEmail: cleanEmail,
@@ -850,12 +928,12 @@ export const PortalProvider = ({ children }) => {
     let officialEmail = '';
 
     if (isStudent) {
-      officialEmail = `${rawInput.toLowerCase()}@isbstudents.comsats.edu.pk`;
-    } else if (rawInput.includes('@')) {
+      officialEmail = `${cleanRegNo}@ISBSTUDENT.COMSATS.EDU.PK`;
+    } else if (isValidOfficialEmailForRole(rawInput, userData.role)) {
       officialEmail = rawInput.toLowerCase();
       cleanRegNo = rawInput.split('@')[0].toUpperCase();
     } else {
-      officialEmail = `${rawInput.toLowerCase()}@isbfaculty.comsats.edu.pk`;
+      officialEmail = buildEmployeeOfficialEmail(userData.name, rawInput);
     }
 
     // ── DUPLICATE ACCOUNT CHECK across ALL roles ──

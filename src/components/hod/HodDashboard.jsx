@@ -19,7 +19,7 @@ import {
   BookOpen,
   Loader2,
 } from 'lucide-react';
-import { usePortal, isOfficialUniversityEmail } from '../../context/PortalContext';
+import { usePortal, isValidOfficialEmailForRole, formatOfficialEmailForDisplay } from '../../context/PortalContext';
 import StudentFilterBar from '../common/StudentFilterBar';
 import confetti from 'canvas-confetti';
 
@@ -106,23 +106,25 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
   };
 
   // ── Profile edit ──
+  const formattedOfficialEmail = formatOfficialEmailForDisplay(currentUser);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState({
     name: currentUser?.name || '',
     designation: currentUser?.designation || '',
     department: currentUser?.department || '',
-    email: currentUser?.officialEmail || currentUser?.email || '',
+    email: formattedOfficialEmail === 'NULL' ? '' : formattedOfficialEmail,
     phone: currentUser?.phone || '',
     office: currentUser?.office || '',
   });
   const [savedProfile, setSavedProfile] = useState({ ...profileDraft });
 
   useEffect(() => {
+    const resolvedEmail = formatOfficialEmailForDisplay(currentUser);
     const updated = {
       name: currentUser?.name || '',
       designation: currentUser?.designation || '',
       department: currentUser?.department || '',
-      email: currentUser?.officialEmail || currentUser?.email || '',
+      email: resolvedEmail === 'NULL' ? '' : resolvedEmail,
       phone: currentUser?.phone || '',
       office: currentUser?.office || '',
     };
@@ -131,8 +133,8 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
   }, [currentUser]);
 
   const handleSaveProfile = () => {
-    if (profileDraft.email && !isOfficialUniversityEmail(profileDraft.email)) {
-      showToast('Official email must end with @isbfaculty.comsats.edu.pk or @isbstudents.comsats.edu.pk', 'error');
+    if (profileDraft.email && !isValidOfficialEmailForRole(profileDraft.email, 'hod')) {
+      showToast('Official employee email must follow first-name.second-name@comsats.edu.pk', 'error');
       return;
     }
     updateUserProfile({
@@ -358,7 +360,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                         { key: 'designation', label: 'Designation',   placeholder: 'Head of Department' },
                         { key: 'department',  label: 'Department',    placeholder: 'Computer Science' },
                         { key: 'office',      label: 'Office Location', placeholder: 'e.g. HoD Secretariat, Faculty Block' },
-                        { key: 'email',       label: 'Official University Email', placeholder: 'e.g. name@isbfaculty.comsats.edu.pk' },
+                        { key: 'email',       label: 'Official University Email', placeholder: 'e.g. first.second@comsats.edu.pk' },
                         { key: 'phone',       label: 'Phone / Ext.',  placeholder: 'e.g. 051-90495049' },
                       ].map(({ key, label, placeholder }) => (
                         <div key={key}>
@@ -425,7 +427,7 @@ export default function HodDashboard({ activeTab = 'dashboard', setActiveTab, on
                       >
                         <Mail className="w-4 h-4 text-purple-300 shrink-0" />
                         <span className="font-bold text-purple-200">Official Email:</span>
-                        <span className="font-mono font-bold">{savedProfile.email || currentUser?.email || 'NULL'}</span>
+                        <span className="font-mono font-bold">{savedProfile.email || formatOfficialEmailForDisplay(currentUser)}</span>
                       </span>
                       {savedProfile.office && (
                         <span

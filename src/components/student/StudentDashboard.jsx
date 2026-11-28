@@ -30,7 +30,7 @@ import {
   BookOpen,
   Camera,
 } from 'lucide-react';
-import { usePortal, downloadTemplateFile, isOfficialUniversityEmail } from '../../context/PortalContext';
+import { usePortal, downloadTemplateFile, isValidOfficialEmailForRole, formatOfficialEmailForDisplay } from '../../context/PortalContext';
 
 export default function StudentDashboard({
   activeTab = 'dashboard',
@@ -201,24 +201,25 @@ export default function StudentDashboard({
   };
 
   // Official university email edit state
+  const displayedOfficialEmail = formatOfficialEmailForDisplay(currentUser);
   const [editingEmail, setEditingEmail] = useState(false);
-  const [emailDraft, setEmailDraft] = useState(currentUser?.email || '');
+  const [emailDraft, setEmailDraft] = useState(displayedOfficialEmail === 'NULL' ? '' : displayedOfficialEmail);
 
   useEffect(() => {
-    setEmailDraft(currentUser?.email || '');
-  }, [currentUser?.email]);
+    setEmailDraft(displayedOfficialEmail === 'NULL' ? '' : displayedOfficialEmail);
+  }, [displayedOfficialEmail]);
 
   const handleSaveEmail = () => {
     const trimmed = emailDraft.trim();
-    if (trimmed && !isOfficialUniversityEmail(trimmed)) {
-      showToast('Official university email must end with @isbstudents.comsats.edu.pk or @isbfaculty.comsats.edu.pk', 'error');
+    if (trimmed && !isValidOfficialEmailForRole(trimmed, 'student')) {
+      showToast('Official student email must follow registration-number@ISBSTUDENT.COMSATS.EDU.PK', 'error');
       return;
     }
-    updateUserProfile({ email: trimmed || null });
+    updateUserProfile({ email: trimmed || null, officialEmail: trimmed || null });
     setEditingEmail(false);
   };
   const handleCancelEmail = () => {
-    setEmailDraft(currentUser?.email || '');
+    setEmailDraft(displayedOfficialEmail === 'NULL' ? '' : displayedOfficialEmail);
     setEditingEmail(false);
   };
 
@@ -419,7 +420,7 @@ export default function StudentDashboard({
                             type="email"
                             value={emailDraft}
                             onChange={(e) => setEmailDraft(e.target.value)}
-                            placeholder="e.g. FA21-BCS-045@isbstudents.comsats.edu.pk"
+                            placeholder="e.g. FA21-BCS-045@ISBSTUDENT.COMSATS.EDU.PK"
                             className="flex-1 px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-[#002147] bg-white text-slate-800"
                             autoFocus
                             onKeyDown={(e) => {
@@ -450,7 +451,7 @@ export default function StudentDashboard({
                           </button>
                         </div>
                         <p className="text-[10px] text-slate-500 leading-tight">
-                          Must end with <span className="font-mono font-bold text-[#002147]">@isbstudents.comsats.edu.pk</span> or <span className="font-mono font-bold text-[#002147]">@isbfaculty.comsats.edu.pk</span>
+                          Must end with <span className="font-mono font-bold text-[#002147]">@ISBSTUDENT.COMSATS.EDU.PK</span> (case-insensitive)
                         </p>
                       </div>
                     ) : (
@@ -459,13 +460,13 @@ export default function StudentDashboard({
                           <Mail className="w-3.5 h-3.5 text-[#c29b38]" />
                           <span className="font-bold text-slate-500">Official Email:</span>
                           <span className="font-mono font-bold text-[#002147]">
-                            {currentUser?.email || 'NULL'}
+                            {displayedOfficialEmail}
                           </span>
                         </div>
                         <button
                           type="button"
                           onClick={() => {
-                            setEmailDraft(currentUser?.email || '');
+                            setEmailDraft(displayedOfficialEmail === 'NULL' ? '' : displayedOfficialEmail);
                             setEditingEmail(true);
                           }}
                           className="px-2 py-1 text-slate-600 hover:text-[#002147] hover:bg-slate-100 rounded-lg transition-all inline-flex items-center gap-1 text-[11px] font-bold border border-slate-200/80 shadow-xs"

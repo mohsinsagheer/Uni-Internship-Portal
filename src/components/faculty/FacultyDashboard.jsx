@@ -21,7 +21,7 @@ import {
   Download,
   BookOpen,
 } from 'lucide-react';
-import { usePortal, downloadTemplateFile, isOfficialUniversityEmail } from '../../context/PortalContext';
+import { usePortal, downloadTemplateFile, isValidOfficialEmailForRole, formatOfficialEmailForDisplay } from '../../context/PortalContext';
 import StudentFilterBar from '../common/StudentFilterBar';
 
 export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab, onOpenSignatureModal, onOpenDocumentViewer }) {
@@ -62,12 +62,13 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
   };
 
   // ── Profile edit ──
+  const formattedOfficialEmail = formatOfficialEmailForDisplay(currentUser);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState({
     name: currentUser?.name || '',
     designation: currentUser?.designation || '',
     department: currentUser?.department || '',
-    officialEmail: currentUser?.officialEmail || currentUser?.email || '',
+    officialEmail: formattedOfficialEmail === 'NULL' ? '' : formattedOfficialEmail,
     phone: currentUser?.phone || '',
     office: currentUser?.office || '',
   });
@@ -76,11 +77,12 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
   useEffect(() => {
     if (editingProfile) return;
 
+    const resolvedEmail = formatOfficialEmailForDisplay(currentUser);
     const updated = {
       name: currentUser?.name || '',
       designation: currentUser?.designation || '',
       department: currentUser?.department || '',
-      officialEmail: currentUser?.officialEmail || currentUser?.email || '',
+      officialEmail: resolvedEmail === 'NULL' ? '' : resolvedEmail,
       phone: currentUser?.phone || '',
       office: currentUser?.office || '',
     };
@@ -90,8 +92,8 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
 
   const handleSaveProfile = () => {
     const officialEmail = profileDraft.officialEmail.trim();
-    if (officialEmail && !isOfficialUniversityEmail(officialEmail)) {
-      showToast('Official email must end with @isbfaculty.comsats.edu.pk or @isbstudents.comsats.edu.pk', 'error');
+    if (officialEmail && !isValidOfficialEmailForRole(officialEmail, 'supervisor')) {
+      showToast('Official employee email must follow first-name.second-name@comsats.edu.pk', 'error');
       return;
     }
     updateUserProfile({
@@ -218,7 +220,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
                     { key: 'designation', label: 'Designation', placeholder: 'Lecturer / Assistant Professor', type: 'text', autoComplete: 'organization-title' },
                     { key: 'department', label: 'Department', placeholder: 'Computer Science', type: 'text', autoComplete: 'organization' },
                     { key: 'office', label: 'Faculty Office', placeholder: 'e.g. Faculty Block A, Room 204', type: 'text', autoComplete: 'work' },
-                    { key: 'officialEmail', label: 'Official University Email', placeholder: 'e.g. name@isbfaculty.comsats.edu.pk', type: 'email', autoComplete: 'email' },
+                    { key: 'officialEmail', label: 'Official University Email', placeholder: 'e.g. first.second@comsats.edu.pk', type: 'email', autoComplete: 'email' },
                     { key: 'phone', label: 'Phone / Ext.', placeholder: 'e.g. 051-90495049', type: 'tel', autoComplete: 'tel' },
                   ].map(({ key, label, placeholder, type, autoComplete }) => (
                     <div key={key}>
@@ -267,7 +269,7 @@ export default function FacultyDashboard({ activeTab = 'dashboard', setActiveTab
                     style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.92)', border: '1px solid rgba(255,255,255,0.20)', backdropFilter: 'blur(6px)' }}>
                     <Mail className="w-4 h-4 text-sky-300 shrink-0" />
                     <span className="font-bold text-sky-200">Official Email:</span>
-                    <span className="font-mono font-bold break-all">{savedProfile.officialEmail || currentUser?.officialEmail || currentUser?.email || 'NULL'}</span>
+                    <span className="font-mono font-bold break-all">{savedProfile.officialEmail || formatOfficialEmailForDisplay(currentUser)}</span>
                   </span>
                   {savedProfile.office && (
                     <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
