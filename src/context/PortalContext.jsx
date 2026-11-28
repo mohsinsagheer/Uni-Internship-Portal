@@ -520,13 +520,19 @@ export const PortalProvider = ({ children }) => {
     const loadInchargeRoster = async () => {
       try {
         const [studentsRes, supervisorsRes] = await Promise.all([
-          getUsersByRoleFromFirestore('student', 1000).then(
+          getUsersByRoleFromFirestore('student', 10000).then(
             (list) => ({ ok: true, list: Array.isArray(list) ? list : [] }),
-            () => ({ ok: false, list: [] })
+            (err) => {
+              console.warn('Notice while fetching students from database:', err);
+              return { ok: false, list: [] };
+            }
           ),
-          getUsersByRoleFromFirestore('supervisor', 1000).then(
+          getUsersByRoleFromFirestore('supervisor', 10000).then(
             (list) => ({ ok: true, list: Array.isArray(list) ? list : [] }),
-            () => ({ ok: false, list: [] })
+            (err) => {
+              console.warn('Notice while fetching supervisors from database:', err);
+              return { ok: false, list: [] };
+            }
           ),
         ]);
         if (cancelled) return;
@@ -581,7 +587,7 @@ export const PortalProvider = ({ children }) => {
             };
           });
         } else {
-          mergedStudents = latestStudents.current;
+          mergedStudents = [];
         }
 
         const deduplicated = deduplicateStudents(mergedStudents);
@@ -591,7 +597,7 @@ export const PortalProvider = ({ children }) => {
       } catch (err) {
         console.warn('Notice while loading roster:', err);
         if (!cancelled) {
-          setInchargeRoster({ students: latestStudents.current, supervisors: latestSupervisors.current, loaded: false });
+          setInchargeRoster({ students: [], supervisors: latestSupervisors.current, loaded: false });
         }
       } finally {
         if (!cancelled) setInchargeRosterLoading(false);
@@ -639,9 +645,9 @@ export const PortalProvider = ({ children }) => {
   const campusStudents = useMemo(() => {
     if (!currentUser) return [];
     const activeCampus = (currentUser?.campusId || selectedCampus || 'isb').toLowerCase();
-    // For HOD (and other non-student roles once database roster is loaded), use only the database-fetched list
-    const sourceStudents = (currentUser.role !== 'student' && inchargeRoster.loaded)
-      ? (inchargeRoster.students || [])
+    // For HOD, Incharge, and Supervisor, ONLY show registered students fetched from the database (never stale localStorage)
+    const sourceStudents = currentUser.role !== 'student'
+      ? (inchargeRoster.loaded ? (inchargeRoster.students || []) : [])
       : deduplicateStudents([...students, ...(inchargeRoster.students || [])]);
     return sourceStudents.filter((student) => {
       const studentCampus = (student.campusId || 'isb').toLowerCase();

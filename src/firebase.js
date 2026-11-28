@@ -341,24 +341,19 @@ export const getUserRoleFromFirestore = async (uid, timeoutMs = 5000) => {
   return null;
 };
 
-export const getUsersByRoleFromFirestore = async (role, timeoutMs = 5000) => {
-  try {
-    const usersQuery = query(
-      collection(db, "users"),
-      where("role", "==", role)
-    );
-    const snapshot = await Promise.race([
-      getDocs(usersQuery),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore fetch timed out")), timeoutMs)),
-    ]);
-    return snapshot.docs.map((userDoc) => ({
-      ...userDoc.data(),
-      firebaseUid: userDoc.id,
-    }));
-  } catch (err) {
-    console.warn("Firestore getUsersByRole notice:", err?.message || err);
-    return [];
-  }
+export const getUsersByRoleFromFirestore = async (role, timeoutMs = 8000) => {
+  const usersQuery = query(
+    collection(db, "users"),
+    where("role", "==", role)
+  );
+  const snapshot = await Promise.race([
+    getDocs(usersQuery),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore fetch timed out")), timeoutMs)),
+  ]);
+  return snapshot.docs.map((userDoc) => ({
+    ...userDoc.data(),
+    firebaseUid: userDoc.id,
+  }));
 };
 
 export const getTemplatesFromFirestore = async (campusId, timeoutMs = 1000) => {
