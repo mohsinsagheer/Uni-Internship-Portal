@@ -316,6 +316,7 @@ export const PortalProvider = ({ children }) => {
   });
   const [inchargeRoster, setInchargeRoster] = useState({ students: [], supervisors: [], loaded: false });
   const [inchargeRosterLoading, setInchargeRosterLoading] = useState(false);
+  const [firebaseAuthUid, setFirebaseAuthUid] = useState(() => auth.currentUser?.uid || null);
 
   // Ref always holds the latest state values for use in callbacks
   const latestStudents = useRef([]);
@@ -423,6 +424,7 @@ export const PortalProvider = ({ children }) => {
   // Firebase Auth State Listener — only runs on mount, uses refs for latest state
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (fbUser) => {
+      setFirebaseAuthUid(fbUser?.uid || null);
       // If a currentUser is already set (login() already handled it), do nothing
       if (
         explicitLoginInProgress.current
@@ -514,6 +516,11 @@ export const PortalProvider = ({ children }) => {
       return undefined;
     }
 
+    if (!firebaseAuthUid) {
+      setInchargeRosterLoading(true);
+      return undefined;
+    }
+
     let cancelled = false;
     setInchargeRosterLoading(true);
 
@@ -570,19 +577,17 @@ export const PortalProvider = ({ children }) => {
         const remoteStudents = studentsRes.list.filter(matchesCampus);
         let mergedStudents;
         if (studentsRes.ok) {
-          // Database fetch succeeded: only show the updated list of student users fetched from database
+          // Database fetch succeeded: only show the actual student users fetched directly from database
           mergedStudents = remoteStudents.map((remote) => {
-            const local = latestStudents.current.find(
-              (l) => l.firebaseUid === remote.firebaseUid || (l.personalEmail && remote.personalEmail && l.personalEmail.toLowerCase() === remote.personalEmail.toLowerCase())
-            );
             const assignedSupervisorId = remote.assignedSupervisorUid
               ? supervisorByUid.get(remote.assignedSupervisorUid)?.id || ''
-              : (remote.assignedSupervisorId || local?.assignedSupervisorId || '');
+              : (remote.assignedSupervisorId || '');
             return {
-              ...(local || {}),
               ...remote,
-              id: remote.id || local?.id || `std-${remote.firebaseUid}`,
+              id: remote.id || `std-${remote.firebaseUid}`,
               role: 'student',
+              notifications: remote.notifications || [],
+              documents: remote.documents || [],
               assignedSupervisorId: supervisorIds.has(assignedSupervisorId) ? assignedSupervisorId : '',
             };
           });
@@ -610,7 +615,7 @@ export const PortalProvider = ({ children }) => {
     };
     // Local arrays are read through refs so local changes do not repeatedly query Firebase.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.role, inchargeCampus]);
+  }, [currentUser?.role, inchargeCampus, firebaseAuthUid]);
 
   useEffect(() => {
     if (!currentUser) return undefined;
